@@ -1,0 +1,23 @@
+# Internal strategy docs — keep private
+path_a_grid_transfer.md
+path_b_coach_swarm.md
+notes/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Temp / build artifacts
+*.tmp
+*.log
+*.bak

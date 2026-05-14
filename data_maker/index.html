@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ARC-AGI-3 Replay</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #0a0a0a; color: #e0e0e0; font-family: ui-monospace, Menlo, "Courier New", monospace; font-size: 13px; height: 100%; }
+  .app { display: grid; grid-template-columns: 1fr 380px; gap: 12px; padding: 12px; height: 100vh; }
+  .left { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .right { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  .panel { background: #141414; border: 1px solid #222; border-radius: 4px; padding: 10px; }
+  h2 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: #888; font-weight: 600; }
+  select, input, button { background: #1a1a1a; color: #e0e0e0; border: 1px solid #333; padding: 4px 8px; font-family: inherit; font-size: 12px; border-radius: 3px; }
+  button { cursor: pointer; }
+  button:hover { background: #252525; border-color: #444; }
+  button.icon { padding: 4px 8px; min-width: 32px; }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .topbar { display: flex; gap: 12px; align-items: center; padding: 6px 0; }
+  .title { font-size: 18px; font-weight: 600; color: #FFDC00; margin-right: auto; letter-spacing: 0.02em; }
+  .canvas-wrap { flex: 1; min-height: 0; background: #000; border: 1px solid #222; border-radius: 4px; display: flex; align-items: center; justify-content: center; padding: 12px; }
+  canvas { image-rendering: pixelated; max-width: 100%; max-height: 100%; }
+  .playback { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #141414; border: 1px solid #222; border-radius: 4px; }
+  .playback .slider { flex: 1; }
+  .frame-info { font-size: 12px; color: #aaa; min-width: 100px; }
+  .marker-badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #000; }
+  .summary-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12px; }
+  .summary-grid b { color: #888; font-weight: normal; }
+  .timeline { flex: 1; overflow-y: auto; min-height: 0; }
+  .timeline-item { padding: 6px 10px; border-bottom: 1px solid #1a1a1a; cursor: pointer; display: flex; gap: 8px; align-items: center; font-size: 11px; }
+  .timeline-item:hover { background: #1a1a1a; }
+  .timeline-item.active { background: #1f2a3a; border-left: 2px solid #1E93FF; padding-left: 8px; }
+  .timeline-item .idx { color: #555; width: 36px; text-align: right; flex-shrink: 0; }
+  .timeline-item .action { color: #888; width: 60px; flex-shrink: 0; }
+  .timeline-item .marker-badge { font-size: 9px; padding: 1px 6px; }
+  .error { color: #F93C31; padding: 8px; background: #2a0000; border-radius: 3px; }
+  .filter-bar { padding: 8px 10px; background: #141414; border-top: 1px solid #222; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .filter-bar select { flex: 1; }
+  .key { background: #222; padding: 1px 5px; border-radius: 2px; font-size: 10px; color: #aaa; }
+  .help { font-size: 10px; color: #555; padding: 4px 0; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- LEFT: game canvas + playback + summary -->
+  <div class="left">
+    <div class="topbar">
+      <span class="title" id="gameTitle">—</span>
+      <label style="font-size:11px;color:#666;">game</label>
+      <select id="gameSelect"></select>
+      <label style="font-size:11px;color:#666;">recording</label>
+      <select id="recSelect" style="min-width:120px;"></select>
+      <span style="opacity:0.4;">|</span>
+      <button id="loadFileBtn" title="Load a .jsonl file from your computer (drag-and-drop on canvas also works)">📁 Load file</button>
+      <input type="file" id="fileInput" accept=".jsonl,.json" style="display:none;">
+    </div>
+
+    <div class="canvas-wrap" id="canvasWrap">
+      <canvas id="frameCanvas" width="640" height="640"></canvas>
+    </div>
+
+    <div class="playback">
+      <button class="icon" id="jumpFirst" title="Home">⏮</button>
+      <button class="icon" id="prevFrame" title="←">◀</button>
+      <button class="icon" id="playBtn" title="Space">▶</button>
+      <button class="icon" id="nextFrame" title="→">▶</button>
+      <button class="icon" id="jumpLast" title="End">⏭</button>
+      <input type="range" id="slider" class="slider" min="0" max="0" value="0">
+      <select id="speedSel" style="width:80px;">
+        <option value="500">2 fps</option>
+        <option value="200" selected>5 fps</option>
+        <option value="100">10 fps</option>
+        <option value="50">20 fps</option>
+      </select>
+    </div>
+    <div class="frame-info" id="frameInfo">load a recording to begin</div>
+
+    <div class="panel reasoning-log" id="reasoningPanel">
+      <h2>Reasoning Log</h2>
+      <div id="reasoningBox" style="font-size:13px; line-height:1.5; min-height:60px; color:#ddd;">
+        <span style="color:#555">(no reasoning captured for this frame)</span>
+      </div>
+    </div>
+
+    <div class="help">Keys: <span class="key">←</span> <span class="key">→</span> step · <span class="key">Shift+←/→</span> ±10 · <span class="key">Home/End</span> · <span class="key">[</span> <span class="key">]</span> filter prev/next · <span class="key">Space</span> play</div>
+
+    <div class="panel">
+      <h2>Session Summary</h2>
+      <div class="summary-grid" id="summary"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT: event timeline -->
+  <div class="right">
+    <div class="panel" style="display:flex; flex-direction:column; padding:0; flex:1; min-height:0;">
+      <h2 style="padding:10px 10px 6px;">Replay Events</h2>
+      <div class="timeline" id="timeline"></div>
+      <div class="filter-bar">
+        <label style="font-size:11px;color:#666;">filter</label>
+        <select id="markerFilter">
+          <option value="all">all</option>
+          <option value="action">actions</option>
+          <option value="reaction">reactions</option>
+          <option value="decision">decisions</option>
+          <option value="result">results</option>
+          <option value="noop">no-ops</option>
+          <option value="mismatch,stuck">surprises</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// ARC-AGI-3 official 16-color palette
+// ============================================================
+const PALETTE = [
+  '#FFFFFF','#CCCCCC','#999999','#666666','#333333','#000000',
+  '#E53AA3','#FF7BCC','#F93C31','#1E93FF','#88D8F1','#FFDC00',
+  '#FF851B','#921231','#4FCC30','#A356D6'
+];
+
+const MARKER_COLORS = {
+  start:        '#888',
+  decision:     '#1E93FF',
+  noop:         '#444',
+  level_change: '#4FCC30',
+  win:          '#FFDC00',
+  loss:         '#F93C31',
+  mismatch:     '#FF851B',
+  stuck:        '#A356D6',
+  reset:        '#999',
+  result:       '#666'
+};
+
+const BASE = '../../agi3_v1/data/arc_agi_3_public_demo_human_testing/public_games-dataset';
+
+// ============================================================
+// State
+// ============================================================
+let manifest = {};
+let frames = [];
+let markers = [];
+let curFrame = 0;
+let curGame = '';
+let curRec = '';
+let playing = false;
+let playTimer = null;
+
+const $ = id => document.getElementById(id);
+
+// ============================================================
+// Marker derivation (pure from recording fields)
+// ============================================================
+function framesEqual(a, b) {
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  for (let y = 0; y < a.length; y++) {
+    const ra = a[y], rb = b[y];
+    if (!ra || !rb || ra.length !== rb.length) return false;
+    for (let x = 0; x < ra.length; x++) {
+      if (ra[x] !== rb[x]) return false;
+    }
+  }
+  return true;
+}
+
+function computeMarkers(fs) {
+  const out = [];
+  let prevFrame = null, prevLevels = 0;
+  for (let i = 0; i < fs.length; i++) {
+    const d = fs[i].data || {};
+    const aid = (d.action_input && d.action_input.id) || 0;
+    const lvl = d.levels_completed || 0;
+    const state = d.state;
+    const frame = d.frame ? d.frame[0] : null;
+    let m = 'result';
+    if (i === 0) m = 'start';
+    else if (lvl > prevLevels) m = 'level_change';
+    else if (state === 'WIN') m = 'win';
+    else if (state === 'GAME_OVER') m = 'loss';
+    else if (aid === 0) m = 'reset';
+    else if (framesEqual(frame, prevFrame)) m = 'noop';
+    else m = 'decision';
+    out.push(m);
+    prevFrame = frame;
+    prevLevels = lvl;
+  }
+  return out;
+}
+
+// ============================================================
+// Manifest + recording load
+// ============================================================
+async function loadManifest() {
+  try {
+    const r = await fetch('manifest.json');
+    manifest = await r.json();
+  } catch (e) {
+    showError('Could not load manifest.json. Make sure server is running from agi-3/ root.');
+    return;
+  }
+  const games = Object.keys(manifest).sort();
+  const sel = $('gameSelect');
+  sel.innerHTML = games.map(g => `<option value="${g}">${g} (${manifest[g].length})</option>`).join('');
+  if (games.length) loadGame(games[0]);
+}
+
+function loadGame(g) {
+  curGame = g;
+  $('gameTitle').textContent = g;
+  $('gameSelect').value = g;
+  const recs = manifest[g] || [];
+  const sel = $('recSelect');
+  sel.innerHTML = recs.map(f => `<option value="${f}">${f.slice(0,8)}…</option>`).join('');
+  if (recs.length) loadRecording(recs[0]);
+}
+
+async function loadRecording(fname) {
+  stopPlay();
+  curRec = fname;
+  $('recSelect').value = fname;
+  const url = `${BASE}/${curGame}/${fname}`;
+  $('frameInfo').textContent = `loading ${fname.slice(0,8)}…`;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
+    const text = await r.text();
+    frames = text.trim().split('\n').map(l => JSON.parse(l));
+  } catch (e) {
+    showError(`Failed to load recording: ${e.message}\nURL: ${url}`);
+    return;
+  }
+  markers = computeMarkers(frames);
+  curFrame = 0;
+  $('slider').max = frames.length - 1;
+  $('slider').value = 0;
+  buildTimeline();
+  render();
+}
+
+function showError(msg) {
+  $('frameInfo').innerHTML = `<span class="error">${msg.replace(/\n/g, '<br>')}</span>`;
+  console.error(msg);
+}
+
+// ============================================================
+// Render: canvas + frame info
+// ============================================================
+function render() {
+  if (!frames.length) return;
+  const f = frames[curFrame];
+  const d = f.data || {};
+  const grid = d.frame && d.frame[0];
+  const canvas = $('frameCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  if (!grid) {
+    ctx.fillStyle = '#220000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+  const size = grid.length;          // 64
+  const cell = canvas.width / size;  // 10
+
+  // Fill cells
+  for (let y = 0; y < size; y++) {
+    const row = grid[y];
+    for (let x = 0; x < size; x++) {
+      ctx.fillStyle = PALETTE[row[x]] || '#ff00ff';
+      ctx.fillRect(x * cell, y * cell, cell, cell);
+    }
+  }
+  // Subtle graph-paper grid
+  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i <= size; i++) {
+    const p = Math.round(i * cell) + 0.5;
+    ctx.moveTo(p, 0); ctx.lineTo(p, canvas.height);
+    ctx.moveTo(0, p); ctx.lineTo(canvas.width, p);
+  }
+  ctx.stroke();
+
+  // Slider + frame info
+  $('slider').value = curFrame;
+  const mk = markers[curFrame] || '?';
+  const aid = (d.action_input && d.action_input.id);
+  const actStr = aid === 0 ? 'RESET' : (aid !== undefined ? `ACTION${aid}` : '—');
+  $('frameInfo').innerHTML =
+    `<span class="marker-badge" style="background:${MARKER_COLORS[mk] || '#888'}">${mk}</span> ` +
+    `frame <b style="color:#fff">${curFrame}/${frames.length - 1}</b> · ` +
+    `${actStr} · lvl ${d.levels_completed || 0}/${d.win_levels || '?'} · ${d.state || ''}`;
+
+  // Session summary
+  const sum = $('summary');
+  // Compute win count + total mismatches across the whole recording
+  const winLvls = d.win_levels || 0;
+  const wins = markers.filter(m => m === 'win').length;
+  const lvlChanges = markers.filter(m => m === 'level_change').length;
+  const decisions = markers.filter(m => m === 'decision').length;
+  const noops = markers.filter(m => m === 'noop').length;
+  const mismatches = markers.filter(m => m === 'mismatch').length;
+  sum.innerHTML = [
+    ['game_id',          d.game_id || '—'],
+    ['recording',        (curRec || '').slice(0, 16) + (curRec && curRec.length > 16 ? '…' : '')],
+    ['frames',           frames.length],
+    ['levels reached',   `${d.levels_completed || 0} / ${winLvls || '?'}`],
+    ['state (current)',  d.state || '—'],
+    ['current action',   actStr],
+    ['available actions',(d.available_actions || []).join(', ')],
+    ['marker',           `<span class="marker-badge" style="background:${MARKER_COLORS[mk] || '#888'}">${mk}</span>`],
+    ['totals',           `${decisions} decisions · ${noops} no-ops · ${lvlChanges} level-changes · ${wins} wins · ${mismatches} mismatches`],
+  ].map(([k, v]) => `<b>${k}</b><span>${v}</span>`).join('');
+
+  // Reasoning log (subtitle-style: current frame's text large, prev 2 frames small/faded above)
+  const rb = $('reasoningBox');
+  if (rb) {
+    const r = d.reasoning;
+    if (r && r.rationale) {
+      const decider = r.decided_by ? `<span style="color:#666; font-size:11px;">[${r.decided_by}${r.play_name ? ' · ' + r.play_name : ''}]</span> ` : '';
+      // Context: show up to 2 previous reasoning lines faded
+      const ctx = [];
+      for (let i = Math.max(0, curFrame - 2); i < curFrame; i++) {
+        const pr = frames[i].data && frames[i].data.reasoning;
+        if (pr && pr.rationale) ctx.push(`<div style="color:#444; font-size:11px;">${escapeHtml(pr.rationale)}</div>`);
+      }
+      rb.innerHTML = ctx.join('') + `<div style="color:#fff; font-size:14px; margin-top:4px;">${decider}${escapeHtml(r.rationale)}</div>`;
+    } else {
+      rb.innerHTML = '<span style="color:#555">(no reasoning captured for this frame)</span>';
+    }
+  }
+
+  // Timeline active highlight
+  document.querySelectorAll('.timeline-item').forEach(el => el.classList.remove('active'));
+  const active = $('tl-' + curFrame);
+  if (active) {
+    active.classList.add('active');
+    const tl = $('timeline');
+    const r = active.getBoundingClientRect();
+    const tr = tl.getBoundingClientRect();
+    if (r.top < tr.top || r.bottom > tr.bottom) active.scrollIntoView({ block: 'center' });
+  }
+}
+
+// ============================================================
+// Timeline (right panel) — full list, filterable
+// ============================================================
+// Filter categories (using user-facing language: action / reaction / decision / result)
+// Each maps a category to a predicate over (markers[i], i)
+const FILTER_PREDICATES = {
+  all:        (_m, _i) => true,
+  action:     (m, _i) => m === 'decision' || m === 'noop' || m === 'reset',  // any frame the agent acted on
+  reaction:   (m, i) => i > 0 && (markers[i-1] === 'decision') && (m === 'level_change' || m === 'win' || m === 'loss'),  // env's response right after a decision
+  decision:   (m, _i) => m === 'decision',
+  result:     (m, _i) => m === 'level_change' || m === 'win' || m === 'loss',
+  noop:       (m, _i) => m === 'noop',
+};
+
+function frameMatchesFilter(i) {
+  const f = $('markerFilter').value;
+  if (f === 'all') return true;
+  // Composite filters: "mismatch,stuck"
+  if (f.includes(',')) {
+    const wanted = new Set(f.split(','));
+    return wanted.has(markers[i]);
+  }
+  const pred = FILTER_PREDICATES[f];
+  return pred ? pred(markers[i], i) : false;
+}
+
+function buildTimeline() {
+  const tl = $('timeline');
+  const items = [];
+  for (let i = 0; i < frames.length; i++) {
+    if (!frameMatchesFilter(i)) continue;
+    const m = markers[i];
+    const d = frames[i].data || {};
+    const aid = (d.action_input && d.action_input.id) || 0;
+    const actStr = aid === 0 ? '—' : `A${aid}`;
+    const color = MARKER_COLORS[m] || '#888';
+    // Short reasoning preview if present
+    const rsn = d.reasoning && d.reasoning.rationale ? ` <span style="color:#666; font-size:10px;">${escapeHtml(d.reasoning.rationale.slice(0, 40))}</span>` : '';
+    items.push(
+      `<div class="timeline-item" id="tl-${i}" data-frame="${i}">` +
+        `<span class="idx">${i}</span>` +
+        `<span class="action">${actStr}</span>` +
+        `<span class="marker-badge" style="background:${color}">${m}</span>` +
+        rsn +
+      `</div>`
+    );
+  }
+  tl.innerHTML = items.join('') || '<div style="padding:20px;color:#555;text-align:center;font-size:11px;">no frames match this filter</div>';
+  tl.querySelectorAll('.timeline-item').forEach(el => {
+    el.onclick = () => {
+      stopPlay();
+      curFrame = parseInt(el.dataset.frame, 10);
+      render();
+    };
+  });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ============================================================
+// Navigation
+// ============================================================
+function step(n) {
+  curFrame = Math.max(0, Math.min(frames.length - 1, curFrame + n));
+  render();
+}
+
+function jumpFiltered(dir) {
+  const filter = $('markerFilter').value;
+  if (filter === 'all') return step(dir);
+  const wanted = new Set(filter.split(','));
+  const indices = [];
+  for (let i = 0; i < markers.length; i++) if (wanted.has(markers[i])) indices.push(i);
+  if (!indices.length) return;
+  const target = dir > 0
+    ? indices.find(i => i > curFrame)
+    : [...indices].reverse().find(i => i < curFrame);
+  if (target !== undefined) { curFrame = target; render(); }
+}
+
+// ============================================================
+// Playback
+// ============================================================
+function stopPlay() {
+  if (playTimer) clearInterval(playTimer);
+  playTimer = null;
+  playing = false;
+  $('playBtn').textContent = '▶';
+}
+
+function startPlay() {
+  if (!frames.length) return;
+  stopPlay();
+  playing = true;
+  $('playBtn').textContent = '⏸';
+  const interval = parseInt($('speedSel').value, 10);
+  playTimer = setInterval(() => {
+    if (curFrame >= frames.length - 1) { stopPlay(); return; }
+    curFrame++;
+    render();
+  }, interval);
+}
+
+function togglePlay() { playing ? stopPlay() : startPlay(); }
+
+// ============================================================
+// Event wiring (defensive)
+// ============================================================
+function wire(id, prop, fn) { const el = $(id); if (el) el[prop] = fn; }
+
+wire('gameSelect',   'onchange', e => loadGame(e.target.value));
+wire('recSelect',    'onchange', e => loadRecording(e.target.value));
+wire('prevFrame',    'onclick',  () => { stopPlay(); step(-1); });
+wire('nextFrame',    'onclick',  () => { stopPlay(); step(1); });
+wire('jumpFirst',    'onclick',  () => { stopPlay(); curFrame = 0; render(); });
+wire('jumpLast',     'onclick',  () => { stopPlay(); curFrame = frames.length - 1; render(); });
+wire('playBtn',      'onclick',  togglePlay);
+wire('speedSel',     'onchange', () => { if (playing) startPlay(); });
+wire('slider',       'oninput',  e => { stopPlay(); curFrame = +e.target.value; render(); });
+wire('markerFilter', 'onchange', () => buildTimeline());
+
+// File-loader: accept a JSONL file from disk (works for agent-emitted replays)
+function loadFileFromBlob(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const text = e.target.result;
+      frames = text.trim().split('\n').map(l => JSON.parse(l));
+      markers = computeMarkers(frames);
+      curFrame = 0;
+      curGame = '(file)';
+      curRec = file.name;
+      $('gameTitle').textContent = file.name;
+      $('slider').max = frames.length - 1;
+      $('slider').value = 0;
+      buildTimeline();
+      render();
+    } catch (err) {
+      showError(`Could not parse ${file.name}: ${err.message}`);
+    }
+  };
+  reader.onerror = () => showError(`Could not read ${file.name}`);
+  reader.readAsText(file);
+}
+wire('loadFileBtn', 'onclick', () => $('fileInput').click());
+wire('fileInput',   'onchange', e => { if (e.target.files[0]) loadFileFromBlob(e.target.files[0]); });
+
+// Drag-and-drop on canvas area
+const dropTarget = $('canvasWrap');
+if (dropTarget) {
+  ['dragenter', 'dragover'].forEach(ev => {
+    dropTarget.addEventListener(ev, e => {
+      e.preventDefault(); e.stopPropagation();
+      dropTarget.style.boxShadow = '0 0 0 2px #1E93FF';
+    });
+  });
+  ['dragleave', 'drop'].forEach(ev => {
+    dropTarget.addEventListener(ev, e => {
+      e.preventDefault(); e.stopPropagation();
+      dropTarget.style.boxShadow = '';
+    });
+  });
+  dropTarget.addEventListener('drop', e => {
+    if (e.dataTransfer.files[0]) loadFileFromBlob(e.dataTransfer.files[0]);
+  });
+}
+
+document.addEventListener('keydown', e => {
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+  if (e.key === 'ArrowLeft')      { stopPlay(); step(e.shiftKey ? -10 : -1); }
+  else if (e.key === 'ArrowRight'){ stopPlay(); step(e.shiftKey ? 10 : 1); }
+  else if (e.key === 'Home')      { stopPlay(); curFrame = 0; render(); }
+  else if (e.key === 'End')       { stopPlay(); curFrame = frames.length - 1; render(); }
+  else if (e.key === ' ')         { e.preventDefault(); togglePlay(); }
+  else if (e.key === '[')         { stopPlay(); jumpFiltered(-1); }
+  else if (e.key === ']')         { stopPlay(); jumpFiltered(1); }
+});
+
+// ============================================================
+// Boot
+// ============================================================
+loadManifest();
+</script>
+</body>
+</html>
