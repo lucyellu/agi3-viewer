@@ -1,0 +1,19 @@
+# Netlify deployment config.
+#
+# The repo root holds README + schemas/ + agent/ for documentation.
+# The hosted site serves only the static viewer from data_maker/.
+#
+# On a hosted deploy there are no co-located recordings, so the in-repo
+# manifest.json's dropdown entries will 404 if clicked. Users should
+# drag-and-drop their own .recording.jsonl onto the canvas instead, OR
+# load via the "Load file" button in the top bar.
+
+[build]
+  publish = "data_maker"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
