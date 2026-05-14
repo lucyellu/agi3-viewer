@@ -200,9 +200,25 @@ def scan_source(src: dict[str, Any]) -> tuple[dict[str, list[str]], dict[str, di
     return games, statuses
 
 
+def detect_branch() -> str | None:
+    # The git repo root may be a parent of data_maker/ — walk up until we find .git/HEAD
+    for parent in [REPO_ROOT, *REPO_ROOT.parents]:
+        head = parent / ".git" / "HEAD"
+        if head.exists():
+            try:
+                s = head.read_text(encoding="utf-8").strip()
+            except OSError:
+                return None
+            if s.startswith("ref: refs/heads/"):
+                return s.removeprefix("ref: refs/heads/")
+            return s[:7] if s else None  # detached HEAD: short SHA
+    return None
+
+
 def main() -> None:
     manifest: dict[str, Any] = {
         "generated_at": int(time.time()),
+        "branch": detect_branch(),
         "sources": {},
     }
     status_index: dict[str, Any] = {}

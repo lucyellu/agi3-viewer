@@ -17,7 +17,9 @@
   button.icon { padding: 4px 8px; min-width: 32px; }
   .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .topbar { display: flex; gap: 12px; align-items: center; padding: 6px 0; }
-  .title { font-size: 18px; font-weight: 600; color: #FFDC00; margin-right: auto; letter-spacing: 0.02em; }
+  .title { font-size: 18px; font-weight: 600; color: #FFDC00; letter-spacing: 0.02em; }
+  .branch-badge { font-size: 10px; padding: 2px 6px; border-radius: 3px; background: #1f2a3a; color: #88D8F1; border: 1px solid #2a4055; letter-spacing: 0.05em; margin-right: auto; font-weight: 500; }
+  .branch-badge.main { background: #1a1a1a; color: #888; border-color: #333; }
   .canvas-wrap { flex: 1; min-height: 0; background: #000; border: 1px solid #222; border-radius: 4px; display: flex; align-items: center; justify-content: center; padding: 12px; }
   canvas { image-rendering: pixelated; max-width: 100%; max-height: 100%; }
   .playback { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #141414; border: 1px solid #222; border-radius: 4px; }
@@ -47,6 +49,7 @@
   <div class="left">
     <div class="topbar" style="flex-wrap:wrap;">
       <span class="title" id="gameTitle">—</span>
+      <span class="branch-badge" id="branchBadge" title="git branch this build was indexed from"></span>
       <label style="font-size:11px;color:#666;">source</label>
       <select id="sourceSelect" style="min-width:160px;"></select>
       <label style="font-size:11px;color:#666;">game</label>
@@ -235,6 +238,13 @@ async function loadManifest() {
   } catch (e) {
     showError('Could not load manifest.json. Make sure server is running from agi-3/ root and `python build_index.py` has been run.');
     return;
+  }
+  // Branch badge (from manifest, set by build_index.py reading .git/HEAD)
+  const badge = $('branchBadge');
+  if (badge) {
+    const br = manifest.branch || '?';
+    badge.textContent = br;
+    badge.classList.toggle('main', br === 'main' || br === 'master');
   }
   // Source dropdown
   const sources = Object.keys(manifest.sources || {});
