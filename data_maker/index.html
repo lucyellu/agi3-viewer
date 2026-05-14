@@ -145,17 +145,22 @@ const PALETTE = [
   '#FF851B','#921231','#4FCC30','#A356D6'
 ];
 
+// Marker palette: where it can, snap to the ARC-AGI-3 16-color palette above.
+// Custom greys (start, noop) are 6-digit hex to match the palette's format but
+// are NOT palette entries — those markers don't carry game-state meaning.
 const MARKER_COLORS = {
-  start:        '#888',
-  decision:     '#1E93FF',
-  noop:         '#444',
-  level_change: '#4FCC30',
-  win:          '#FFDC00',
-  loss:         '#F93C31',
-  mismatch:     '#FF851B',
-  stuck:        '#A356D6',
-  reset:        '#999',
-  result:       '#666'
+  // ARC palette entries
+  decision:     '#1E93FF',  // PALETTE[9]  blue
+  level_change: '#4FCC30',  // PALETTE[14] green
+  win:          '#FFDC00',  // PALETTE[11] yellow
+  loss:         '#F93C31',  // PALETTE[8]  red
+  mismatch:     '#FF851B',  // PALETTE[12] orange
+  stuck:        '#A356D6',  // PALETTE[15] purple
+  reset:        '#999999',  // PALETTE[2]  medium grey
+  result:       '#666666',  // PALETTE[3]  dark grey
+  // Custom (intentionally not in palette so they read as "no game meaning")
+  start:        '#888888',  // between palette[2] and palette[3]
+  noop:         '#444444',  // between palette[3] and palette[4]
 };
 
 // ============================================================
