@@ -45,12 +45,23 @@
 
   <!-- LEFT: game canvas + playback + summary -->
   <div class="left">
-    <div class="topbar">
+    <div class="topbar" style="flex-wrap:wrap;">
       <span class="title" id="gameTitle">—</span>
+      <label style="font-size:11px;color:#666;">source</label>
+      <select id="sourceSelect" style="min-width:160px;"></select>
       <label style="font-size:11px;color:#666;">game</label>
       <select id="gameSelect"></select>
+      <label style="font-size:11px;color:#666;">status</label>
+      <select id="statusFilter" style="min-width:120px;">
+        <option value="all">all</option>
+        <option value="won">won (full)</option>
+        <option value="any_progress">won or partial</option>
+        <option value="partial">partial only</option>
+        <option value="lost">lost (GAME_OVER)</option>
+        <option value="no_progress">no progress</option>
+      </select>
       <label style="font-size:11px;color:#666;">recording</label>
-      <select id="recSelect" style="min-width:120px;"></select>
+      <select id="recSelect" style="min-width:200px;"></select>
       <span style="opacity:0.4;">|</span>
       <button id="loadFileBtn" title="Load a .jsonl file from your computer (drag-and-drop on canvas also works)">📁 Load file</button>
       <input type="file" id="fileInput" accept=".jsonl,.json" style="display:none;">
@@ -135,19 +146,38 @@ const MARKER_COLORS = {
   result:       '#666'
 };
 
-const BASE = '../../agi3_v1/data/arc_agi_3_public_demo_human_testing/public_games-dataset';
-
 // ============================================================
 // State
 // ============================================================
-let manifest = {};
+let manifest = { sources: {} };     // {generated_at, sources: {id: {label, base_url, layout, games}}}
+let statusIndex = {};               // {source_id: {game: {filename: {status, levels_completed, win_levels, ...}}}}
 let frames = [];
 let markers = [];
 let curFrame = 0;
+let curSource = '';
 let curGame = '';
 let curRec = '';
 let playing = false;
 let playTimer = null;
+
+// Short status badges for the recording dropdown (monospace-friendly)
+const STATUS_BADGE = {
+  won:          '[WON]',
+  won_partial:  '[WON*]',
+  partial:      '[PART]',
+  lost:         '[LOST]',
+  no_progress:  '[----]',
+};
+
+function statusMatchesFilter(st, filter) {
+  if (filter === 'all' || !st) return true;
+  if (filter === 'won')          return st.status === 'won';
+  if (filter === 'partial')      return st.status === 'partial' || st.status === 'won_partial';
+  if (filter === 'any_progress') return st.status === 'won' || st.status === 'won_partial' || st.status === 'partial';
+  if (filter === 'lost')         return st.status === 'lost';
+  if (filter === 'no_progress')  return st.status === 'no_progress';
+  return true;
+}
 
 const $ = id => document.getElementById(id);
 
@@ -196,34 +226,85 @@ function computeMarkers(fs) {
 // ============================================================
 async function loadManifest() {
   try {
-    const r = await fetch('manifest.json');
-    manifest = await r.json();
+    const [m, s] = await Promise.all([
+      fetch('manifest.json').then(r => r.json()),
+      fetch('status_index.json').then(r => r.json()).catch(() => ({})),
+    ]);
+    manifest = m;
+    statusIndex = s || {};
   } catch (e) {
-    showError('Could not load manifest.json. Make sure server is running from agi-3/ root.');
+    showError('Could not load manifest.json. Make sure server is running from agi-3/ root and `python build_index.py` has been run.');
     return;
   }
-  const games = Object.keys(manifest).sort();
+  // Source dropdown
+  const sources = Object.keys(manifest.sources || {});
+  if (!sources.length) {
+    showError('manifest.json has no sources. Run `python build_index.py` to generate one.');
+    return;
+  }
+  const srcSel = $('sourceSelect');
+  srcSel.innerHTML = sources.map(id => {
+    const src = manifest.sources[id];
+    const total = Object.values(src.games || {}).reduce((a, b) => a + b.length, 0);
+    return `<option value="${id}">${src.label || id} (${total})</option>`;
+  }).join('');
+  loadSource(sources[0]);
+}
+
+function loadSource(sid) {
+  curSource = sid;
+  $('sourceSelect').value = sid;
+  const src = manifest.sources[sid];
+  if (!src) { showError(`source not found: ${sid}`); return; }
+  const games = Object.keys(src.games).sort();
   const sel = $('gameSelect');
-  sel.innerHTML = games.map(g => `<option value="${g}">${g} (${manifest[g].length})</option>`).join('');
+  sel.innerHTML = games.map(g => `<option value="${g}">${g} (${src.games[g].length})</option>`).join('');
   if (games.length) loadGame(games[0]);
 }
 
 function loadGame(g) {
   curGame = g;
-  $('gameTitle').textContent = g;
+  $('gameTitle').textContent = `${g} · ${manifest.sources[curSource]?.label || curSource}`;
   $('gameSelect').value = g;
-  const recs = manifest[g] || [];
+  populateRecordings();
+}
+
+function populateRecordings() {
+  const src = manifest.sources[curSource];
+  if (!src) return;
+  const filter = $('statusFilter').value;
+  const allRecs = src.games[curGame] || [];
+  const statuses = (statusIndex[curSource] && statusIndex[curSource][curGame]) || {};
+  const recs = allRecs.filter(f => statusMatchesFilter(statuses[f], filter));
   const sel = $('recSelect');
-  sel.innerHTML = recs.map(f => `<option value="${f}">${f.slice(0,8)}…</option>`).join('');
-  if (recs.length) loadRecording(recs[0]);
+  if (!recs.length) {
+    sel.innerHTML = '<option value="">— no recordings match filter —</option>';
+    $('frameInfo').textContent = 'no recordings match the current status filter';
+    return;
+  }
+  sel.innerHTML = recs.map(f => {
+    const st = statuses[f];
+    const badge = st ? (STATUS_BADGE[st.status] || '[?]') : '[?]';
+    const lvls = st ? `${st.levels_completed}/${st.win_levels}` : '?';
+    // Strip predictable prefixes from filename for legibility
+    const stripped = f.replace(new RegExp(`^${curGame}\\.`), '').replace(/^myagent\./, '');
+    return `<option value="${f}">${badge} ${lvls} · ${stripped.slice(0, 22)}…</option>`;
+  }).join('');
+  loadRecording(recs[0]);
 }
 
 async function loadRecording(fname) {
   stopPlay();
+  if (!fname) return;
   curRec = fname;
   $('recSelect').value = fname;
-  const url = `${BASE}/${curGame}/${fname}`;
-  $('frameInfo').textContent = `loading ${fname.slice(0,8)}…`;
+  const src = manifest.sources[curSource];
+  if (!src) { showError('no source selected'); return; }
+  // game_dir layout puts files at <base>/<game>/<file>; flat_prefixed puts them at <base>/<file>
+  const url = src.layout === 'game_dir'
+    ? `${src.base_url}/${curGame}/${fname}`
+    : `${src.base_url}/${fname}`;
+  $('frameInfo').textContent = `loading ${fname.slice(0, 12)}…`;
   try {
     const r = await fetch(url);
     if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
@@ -457,7 +538,9 @@ function togglePlay() { playing ? stopPlay() : startPlay(); }
 // ============================================================
 function wire(id, prop, fn) { const el = $(id); if (el) el[prop] = fn; }
 
+wire('sourceSelect', 'onchange', e => loadSource(e.target.value));
 wire('gameSelect',   'onchange', e => loadGame(e.target.value));
+wire('statusFilter', 'onchange', () => populateRecordings());
 wire('recSelect',    'onchange', e => loadRecording(e.target.value));
 wire('prevFrame',    'onclick',  () => { stopPlay(); step(-1); });
 wire('nextFrame',    'onclick',  () => { stopPlay(); step(1); });

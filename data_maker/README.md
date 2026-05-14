@@ -1,6 +1,22 @@
-# Data Maker
+# Data Maker / agi3-viewer
 
-Single-page browser app to view ARC-AGI-3 human replay recordings, label them, and produce the `arc_play_by_play.jsonl` consumed by Path B notebooks.
+Single-page browser app to view ARC-AGI-3 replay recordings — human plays from the public-25 dataset *and* agent recordings from prior solver runs (`clickgames`, `sim_solver`). Filter by source (human / agent version), by win/loss status, and by per-frame marker.
+
+## Build the index
+
+The viewer reads `manifest.json` and `status_index.json`. Regenerate them whenever recordings are added or moved:
+
+```powershell
+cd C:/Users/lucyl/Desktop/agi-3/agi3_v3/data_maker
+python build_index.py
+```
+
+This scans:
+- `agi3_v1/data/arc_agi_3_public_demo_human_testing/public_games-dataset/` — 340 human recordings
+- `agi3_v1/clickgames/results/{v6,v7,v8}-logs/recordings/` — agent recordings
+- `agi3_v1/sim_solver/results/{v9,v11,v14,v15,v16,v17}/recordings/` — agent recordings (v17 = highest local score)
+
+…and extracts win/levels-completed/total-actions per recording into `status_index.json`. ~505 recordings total at last scan.
 
 ## Run
 
@@ -12,7 +28,15 @@ python -m http.server 8080
 
 Then open: <http://localhost:8080/agi3_v3/data_maker/>
 
-The server must be started from `agi-3/` (not from `data_maker/`) so the relative path `../../agi3_v1/data/...` resolves to the recordings.
+The server must be started from `agi-3/` so the relative paths (`../../agi3_v1/...`) resolve.
+
+## Filters
+
+The topbar exposes three filters:
+
+1. **source** — which recording set to browse (Human, Agent: clickgames v6/v7/v8, Agent: sim_solver v9/v11/v14/v15/v16/v17).
+2. **status** — `won` (beat all levels) · `won or partial` · `partial only` · `lost` (GAME_OVER) · `no progress`.
+3. **recording** — actual file selector, prefixed with a status badge (`[WON]`, `[PART]`, `[LOST]`, `[----]`) and levels-reached (e.g. `5/8`).
 
 ## What you do here
 
