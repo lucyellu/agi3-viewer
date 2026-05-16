@@ -215,25 +215,33 @@ function framesEqual(a, b) {
 }
 
 function computeMarkers(fs) {
+  // Marker inference priority:
+  //   start → level_change → win → loss → reset → noop → decision
+  // Frame-change is the primary signal for decision vs noop because agent recordings
+  // do not populate action_input.id reliably (every frame shows id=0). We only treat
+  // action_input.id===0 as a reset when the env state actually changed to NOT_PLAYED
+  // or full_reset is set; otherwise id=0 just means "agent recorder didn't capture
+  // the chosen action" and the frame transition itself tells us if a decision happened.
   const out = [];
-  let prevFrame = null, prevLevels = 0;
+  let prevFrame = null, prevLevels = 0, prevState = null;
   for (let i = 0; i < fs.length; i++) {
     const d = fs[i].data || {};
-    const aid = (d.action_input && d.action_input.id) || 0;
     const lvl = d.levels_completed || 0;
     const state = d.state;
     const frame = d.frame ? d.frame[0] : null;
-    let m = 'result';
+    let m = 'decision';
     if (i === 0) m = 'start';
     else if (lvl > prevLevels) m = 'level_change';
     else if (state === 'WIN') m = 'win';
     else if (state === 'GAME_OVER') m = 'loss';
-    else if (aid === 0) m = 'reset';
+    else if (d.full_reset === true) m = 'reset';
+    else if (state === 'NOT_PLAYED' && prevState && prevState !== 'NOT_PLAYED') m = 'reset';
     else if (framesEqual(frame, prevFrame)) m = 'noop';
     else m = 'decision';
     out.push(m);
     prevFrame = frame;
     prevLevels = lvl;
+    prevState = state;
   }
   return out;
 }
