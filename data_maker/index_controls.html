@@ -21,6 +21,7 @@
   .branch-badge { font-size: 10px; padding: 2px 6px; border-radius: 3px; background: #1f2a3a; color: #88D8F1; border: 1px solid #2a4055; letter-spacing: 0.05em; margin-right: auto; font-weight: 500; }
   .branch-badge.main { background: #1a1a1a; color: #888; border-color: #333; }
   .v2-badge { font-size: 10px; padding: 2px 6px; border-radius: 3px; background: #2a1f3a; color: #A356D6; border: 1px solid #4a2f5a; letter-spacing: 0.05em; font-weight: 600; }
+  .game-status-badge { font-size: 10px; padding: 2px 8px; border-radius: 3px; letter-spacing: 0.05em; font-weight: 700; border: 1px solid currentColor; }
   .canvas-wrap { flex: 1; min-height: 0; background: #000; border: 1px solid #222; border-radius: 4px; display: flex; align-items: center; justify-content: center; padding: 12px; }
   canvas { image-rendering: pixelated; max-width: 100%; max-height: 100%; }
   .playback { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #141414; border: 1px solid #222; border-radius: 4px; }
@@ -105,6 +106,40 @@
 
   .avail-text { font-size: 11px; color: #666; margin-left: auto; }
   .avail-text b { color: #aaa; font-weight: normal; }
+
+  /* === Per-level breakdown === */
+  .levels-list { display: flex; flex-direction: column; }
+  .level-row {
+    display: grid;
+    grid-template-columns: 38px 110px 110px 90px 60px 1fr;
+    gap: 8px;
+    padding: 5px 8px;
+    border-bottom: 1px solid #1a1a1a;
+    cursor: pointer;
+    font-size: 11px;
+    align-items: center;
+  }
+  .level-row:last-child { border-bottom: none; }
+  .level-row:hover { background: #1a1a1a; }
+  .level-row.active {
+    background: #1f2a3a;
+    border-left: 2px solid #1E93FF;
+    padding-left: 6px;
+  }
+  .level-row .lvl-name { color: #FFDC00; font-weight: 600; }
+  .level-row .lvl-status {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+  }
+  .level-row .lvl-frames { color: #666; }
+  .level-row .lvl-counts { color: #888; }
+  .level-row .lvl-deaths { color: #F93C31; font-size: 10px; }
+  .level-row .lvl-deaths.zero { color: #333; }
+  .level-row .lvl-actions { display: flex; flex-wrap: wrap; gap: 2px 8px; }
+  .level-row .lvl-actions .act-tally { font-size: 11px; }
+  .levels-hint { font-size: 10px; color: #555; padding: 6px 8px 0; }
 </style>
 </head>
 <body>
@@ -115,6 +150,7 @@
     <div class="topbar" style="flex-wrap:wrap;">
       <span class="title" id="gameTitle">—</span>
       <span class="v2-badge">CONTROLS</span>
+      <span class="game-status-badge" id="gameStatusBadge" style="display:none;"></span>
       <span class="branch-badge" id="branchBadge" title="git branch this build was indexed from"></span>
       <label style="font-size:11px;color:#666;">source</label>
       <select id="sourceSelect" style="min-width:160px;"></select>
@@ -204,6 +240,12 @@
       <h2>Session Summary</h2>
       <div class="summary-grid" id="summary"></div>
     </div>
+
+    <div class="panel" style="padding: 6px 0 0;">
+      <h2 style="padding: 0 10px 6px;">Levels Breakdown</h2>
+      <div class="levels-list" id="levelsBox"></div>
+      <div class="levels-hint">click a row to jump to that level's first frame · the row containing the playhead is highlighted</div>
+    </div>
   </div>
 
   <!-- RIGHT: event timeline -->
@@ -277,6 +319,7 @@ let manifest = { sources: {} };
 let statusIndex = {};
 let frames = [];
 let markers = [];
+let levelSegs = [];   // [{level, start, end, frames, decisions, noops, actions: {1..7}, outcome}]
 let curFrame = 0;
 let curSource = '';
 let curGame = '';
@@ -442,6 +485,7 @@ async function loadRecording(fname) {
     return;
   }
   markers = computeMarkers(frames);
+  levelSegs = computeLevelSegments(frames, markers);
   curFrame = 0;
   $('slider').max = frames.length - 1;
   $('slider').value = 0;
@@ -453,6 +497,186 @@ async function loadRecording(fname) {
 function showError(msg) {
   $('frameInfo').innerHTML = `<span class="error">${msg.replace(/\n/g, '<br>')}</span>`;
   console.error(msg);
+}
+
+// ============================================================
+// Level segmentation: split a recording into per-level chunks
+// ============================================================
+// Outcomes:
+//   won         — segment ended in a levels_completed bump OR state=WIN
+//   lost        — trailing segment whose final frame is GAME_OVER (player didn't recover)
+//   reset       — player abandoned the level (full_reset or NOT_PLAYED transition)
+//   in_progress — trailing segment that contains curFrame (computed at render)
+//   uncompleted — trailing segment whose final frame is NOT_FINISHED (recording cut short)
+//
+// Note: mid-level GAME_OVER → NOT_FINISHED bounces are NOT segment boundaries — they're
+// just deaths the player retried from. Tallied as seg.deaths.
+function computeLevelSegments(fs, mks) {
+  if (!fs.length) return [];
+  const segs = [];
+  let segStart = 0;
+  let segLevel = ((fs[0].data && fs[0].data.levels_completed) || 0) + 1;
+
+  for (let i = 1; i < fs.length; i++) {
+    const d = fs[i].data || {};
+    const prevD = fs[i-1].data || {};
+    const lc = d.levels_completed || 0;
+    const prevLc = prevD.levels_completed || 0;
+    const st = d.state;
+    const bumped = lc > prevLc;
+    const isWin = st === 'WIN';
+    const isReset = d.full_reset === true ||
+                    (st === 'NOT_PLAYED' && prevD.state && prevD.state !== 'NOT_PLAYED');
+
+    if (isWin) {
+      // Final level beaten — close current segment at this frame and stop.
+      // Set segStart past end so the trailing-segment check below skips any
+      // post-WIN cleanup frames (state=None, etc.) instead of emitting a
+      // phantom "L<N+1> uncompleted" row.
+      segs.push({ level: segLevel, start: segStart, end: i, outcome: 'won' });
+      segStart = fs.length;
+      break;
+    } else if (bumped) {
+      // Intermediate level victory — previous level ends at i-1, new level starts at i.
+      segs.push({ level: segLevel, start: segStart, end: i - 1, outcome: 'won' });
+      segLevel = lc + 1;
+      segStart = i;
+    } else if (isReset) {
+      segs.push({ level: segLevel, start: segStart, end: i - 1, outcome: 'reset' });
+      segLevel = lc + 1;
+      segStart = i;
+    }
+  }
+
+  // Trailing segment: outcome based on the final frame's state
+  if (segStart < fs.length) {
+    const lastSt = fs[fs.length - 1].data && fs[fs.length - 1].data.state;
+    const outcome = lastSt === 'GAME_OVER' ? 'lost' : 'uncompleted';
+    segs.push({
+      level: segLevel,
+      start: segStart,
+      end: fs.length - 1,
+      outcome,
+    });
+  }
+
+  // Tally counts + deaths (GAME_OVER transitions within the segment)
+  for (const seg of segs) {
+    seg.frames = seg.end - seg.start + 1;
+    seg.decisions = 0;
+    seg.noops = 0;
+    seg.deaths = 0;
+    seg.actions = { 1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0 };
+    let prevSt = null;
+    for (let i = seg.start; i <= seg.end; i++) {
+      if (mks[i] === 'decision') seg.decisions++;
+      else if (mks[i] === 'noop') seg.noops++;
+      const a = frameAction(fs[i]);
+      if (a.id && a.id >= 1 && a.id <= 7) seg.actions[a.id]++;
+      const st = fs[i].data && fs[i].data.state;
+      if (st === 'GAME_OVER' && prevSt !== 'GAME_OVER') seg.deaths++;
+      prevSt = st;
+    }
+  }
+  return segs;
+}
+
+const OUTCOME_COLOR = {
+  won:          '#4FCC30',
+  lost:         '#F93C31',
+  reset:        '#A356D6',
+  uncompleted:  '#FF851B',
+  in_progress:  '#1E93FF',
+};
+
+// "Destiny" label for a frame's per-level status, derived from its segment outcome.
+// This replaces the raw env state ('NOT_FINISHED') which is misleading when you can
+// see from the rest of the playback that the level was eventually beaten.
+const FRAME_DESTINY_LABEL = {
+  won:          'level_completed',
+  lost:         'level_failed',
+  reset:        'level_reset',
+  uncompleted:  'level_unfinished',
+};
+
+function segmentAt(frameIdx) {
+  for (const seg of levelSegs) {
+    if (frameIdx >= seg.start && frameIdx <= seg.end) return seg;
+  }
+  // Post-WIN cleanup frames (state=null after the winning frame) live past the
+  // last segment's end. Attribute them to the last segment so the destiny label
+  // stays consistent instead of dropping to "L?/? · —".
+  if (levelSegs.length && frameIdx > levelSegs[levelSegs.length - 1].end) {
+    return levelSegs[levelSegs.length - 1];
+  }
+  return null;
+}
+
+// Overall recording outcome — what does the whole replay show?
+// Returns null if no recording loaded, else { label, color }.
+function recordingOutcome() {
+  if (!levelSegs.length || !frames.length) return null;
+  const winLvls = (frames[0].data && frames[0].data.win_levels) ||
+                  (frames[frames.length - 1].data && frames[frames.length - 1].data.win_levels) || 0;
+  const wonCount = levelSegs.filter(s => s.outcome === 'won').length;
+  const last = levelSegs[levelSegs.length - 1];
+  // All levels beaten = whole game completed
+  if (winLvls && wonCount >= winLvls) return { label: 'GAME COMPLETED', color: '#4FCC30' };
+  // Trailing segment lost = recording ended in GAME_OVER on this level
+  if (last.outcome === 'lost') return { label: `LOST ${wonCount}/${winLvls || '?'}`, color: '#F93C31' };
+  // Some progress but didn't finish
+  if (wonCount > 0) return { label: `PARTIAL ${wonCount}/${winLvls || '?'}`, color: '#FFDC00' };
+  // No progress at all
+  return { label: 'NO PROGRESS', color: '#888' };
+}
+const OUTCOME_LABEL = {
+  won:          '✓ won',
+  lost:         '✗ lost',
+  reset:        '⟲ reset',
+  uncompleted:  '⏸ uncompleted',
+  in_progress:  '⏵ in progress',
+};
+
+function renderLevels() {
+  const box = $('levelsBox');
+  if (!box) return;
+  if (!levelSegs.length) {
+    box.innerHTML = '<div style="padding:10px; color:#555;">no level data</div>';
+    return;
+  }
+  const rows = levelSegs.map((seg, idx) => {
+    const isCur = curFrame >= seg.start && curFrame <= seg.end;
+    // The trailing (uncompleted) segment containing the playhead is really "in progress"
+    const effOutcome = (isCur && seg.outcome === 'uncompleted') ? 'in_progress' : seg.outcome;
+    const statusColor = OUTCOME_COLOR[effOutcome] || '#888';
+    const statusLabel = OUTCOME_LABEL[effOutcome] || effOutcome;
+    const actionsHtml = [1,2,3,4,5,6,7].map(aid => {
+      if (!seg.actions[aid]) return '';
+      const col = ACTION_COLORS[aid] || '#888';
+      return `<span class="act-tally" style="color:${col}">${ACTION_EMOJI[aid]}${seg.actions[aid]}</span>`;
+    }).join('');
+    const deathsHtml = seg.deaths > 0
+      ? `<span class="lvl-deaths">💀 ${seg.deaths}</span>`
+      : `<span class="lvl-deaths zero">💀 0</span>`;
+    return (
+      `<div class="level-row ${isCur ? 'active' : ''}" data-start="${seg.start}">` +
+        `<span class="lvl-name">L${seg.level}</span>` +
+        `<span class="lvl-status" style="color:${statusColor}">${statusLabel}</span>` +
+        `<span class="lvl-frames">f${seg.start}–${seg.end} (${seg.frames})</span>` +
+        `<span class="lvl-counts">${seg.decisions}d · ${seg.noops}n</span>` +
+        deathsHtml +
+        `<span class="lvl-actions">${actionsHtml || '<span style="color:#444">no actions</span>'}</span>` +
+      `</div>`
+    );
+  }).join('');
+  box.innerHTML = rows;
+  box.querySelectorAll('.level-row').forEach(el => {
+    el.onclick = () => {
+      stopPlay();
+      curFrame = parseInt(el.dataset.start, 10);
+      render();
+    };
+  });
 }
 
 // ============================================================
@@ -532,13 +756,39 @@ function render() {
   const actStr = aid === 0
     ? '⟲ RESET'
     : (aid ? aEmoji + (ACTION_NAMES[aid] || `A${aid}`) + (aid === 6 ? ` (${act.x},${act.y})` : '') : '—');
+
+  // Derived per-frame status: based on which level-segment this frame belongs to,
+  // rather than the raw env state ('NOT_FINISHED' which lies once you know how the
+  // level resolves). The current level number also comes from the segment so it
+  // doesn't read as "L0" before any level is completed.
+  const seg = segmentAt(curFrame);
+  const destinyLabel = seg ? (FRAME_DESTINY_LABEL[seg.outcome] || seg.outcome) : '—';
+  const destinyColor = seg ? (OUTCOME_COLOR[seg.outcome] || '#aaa') : '#888';
+  const winLvls = d.win_levels || 0;
+  const curLvl = seg ? seg.level : ((d.levels_completed || 0) + 1);
+
   $('frameInfo').innerHTML =
     `<span class="marker-badge" style="background:${MARKER_COLORS[mk] || '#888'}">${mk}</span> ` +
     `frame <b style="color:#fff">${curFrame}/${frames.length - 1}</b> · ` +
-    `${actStr} · lvl ${d.levels_completed || 0}/${d.win_levels || '?'} · ${d.state || ''}`;
+    `${actStr} · ` +
+    `L<b style="color:#FFDC00">${curLvl}</b>/${winLvls || '?'} · ` +
+    `<span style="color:${destinyColor}; font-weight:600;">${destinyLabel}</span>` +
+    (d.state ? ` <span style="color:#444; font-size:11px;">(raw: ${d.state})</span>` : '');
+
+  // Topbar recording-outcome badge
+  const ro = recordingOutcome();
+  const gsb = $('gameStatusBadge');
+  if (gsb) {
+    if (ro) {
+      gsb.style.display = '';
+      gsb.style.color = ro.color;
+      gsb.textContent = ro.label;
+    } else {
+      gsb.style.display = 'none';
+    }
+  }
 
   const sum = $('summary');
-  const winLvls = d.win_levels || 0;
   const wins = markers.filter(m => m === 'win').length;
   const lvlChanges = markers.filter(m => m === 'level_change').length;
   const decisions = markers.filter(m => m === 'decision').length;
@@ -574,6 +824,9 @@ function render() {
 
   // Controls strip
   renderControls(f);
+
+  // Per-level breakdown (highlights the level containing curFrame)
+  renderLevels();
 
   // Timeline active highlight
   document.querySelectorAll('.timeline-item').forEach(el => el.classList.remove('active'));
@@ -843,6 +1096,7 @@ function loadFileFromBlob(file) {
       const text = e.target.result;
       frames = text.trim().split('\n').map(l => JSON.parse(l));
       markers = computeMarkers(frames);
+      levelSegs = computeLevelSegments(frames, markers);
       curFrame = 0;
       curGame = '(file)';
       curRec = file.name;
