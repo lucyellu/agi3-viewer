@@ -23,9 +23,9 @@ for %%P in (
 )
 
 if defined CHROME (
-    start "" %CHROME% --app="http://localhost:%PORT%/agi3_v3/data_maker/"
+    start "" %CHROME% --app="http://localhost:%PORT%/agi3_v3/data_maker/index_controls.html"
 ) else (
-    start "" "http://localhost:%PORT%/agi3_v3/data_maker/"
+    start "" "http://localhost:%PORT%/agi3_v3/data_maker/index_controls.html"
 )
 
 endlocal
