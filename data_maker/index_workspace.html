@@ -15,47 +15,62 @@
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
     z-index: 10000;
   }
-  .workspace-area {
+  /* === Lane-based workspace: 3 columns separated by vertical splitters,
+     each column holds N panels separated by horizontal splitters. Lane widths
+     and panel heights are stored as flex-grow ratios so the layout always
+     fills the viewport exactly with no overlaps. === */
+  .workspace-lanes {
     position: fixed; top: 50px; left: 0; right: 0; bottom: 0;
     background: #050505;
+    display: flex; align-items: stretch;
+  }
+  .lane {
+    display: flex; flex-direction: column;
+    min-width: 120px;
+    /* flex-grow set inline per lane; flex-basis: 0 so growth ratios determine width */
+    flex-basis: 0;
   }
   .panel-window {
-    position: absolute;
-    background: #141414; border: 1px solid #222; border-radius: 4px;
+    position: relative;
+    background: #141414; border: 1px solid #222; border-radius: 3px;
     display: flex; flex-direction: column;
-    min-width: 180px; min-height: 100px;
+    min-height: 70px;
     overflow: hidden;
+    margin: 2px;
+    /* flex-grow set inline per panel; flex-basis: 0 */
+    flex-basis: 0;
   }
   .panel-window.focused { border-color: #2a4055; box-shadow: 0 0 0 1px #1E93FF inset; }
   .panel-header {
     background: #1a1a1a; border-bottom: 1px solid #222;
-    padding: 4px 8px; flex-shrink: 0;
+    padding: 3px 8px; flex-shrink: 0;
     display: flex; align-items: center; gap: 8px;
-    cursor: grab; user-select: none;
+    user-select: none;
   }
-  .panel-header.dragging { cursor: grabbing; }
   .panel-window.focused .panel-header { background: #1f2a3a; }
   .panel-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: #888; font-weight: 600; }
   .panel-window.focused .panel-title { color: #88D8F1; }
   .panel-body { flex: 1; min-height: 0; overflow: auto; padding: 10px; position: relative; }
   .panel-body.no-pad { padding: 0; }
-  .resize-handle {
-    position: absolute; right: 0; bottom: 0; width: 14px; height: 14px;
-    cursor: nwse-resize;
-    background: linear-gradient(135deg, transparent 50%, #2a2a2a 50%, #2a2a2a 60%, transparent 60%, transparent 75%, #2a2a2a 75%, #2a2a2a 85%, transparent 85%);
+
+  /* Splitters between lanes (vertical) and between panels in a lane (horizontal) */
+  .splitter-v {
+    flex: 0 0 5px;
+    background: #0a0a0a;
+    cursor: ew-resize;
+    transition: background 80ms;
     z-index: 5;
   }
-  .resize-handle:hover { background: linear-gradient(135deg, transparent 50%, #1E93FF 50%, #1E93FF 60%, transparent 60%, transparent 75%, #1E93FF 75%, #1E93FF 85%, transparent 85%); }
-  /* Edge resize handles (right, bottom). Injected by JS so all panels get them.
-     Corner handle is the existing .resize-handle. */
-  .resize-edge { position: absolute; background: transparent; z-index: 4; }
-  .resize-edge.right  { right: 0; top: 0; bottom: 14px; width: 6px; cursor: ew-resize; }
-  .resize-edge.bottom { bottom: 0; left: 0; right: 14px; height: 6px; cursor: ns-resize; }
-  .resize-edge:hover { background: rgba(30, 147, 255, 0.2); }
-  body.dragging, body.dragging * { cursor: grabbing !important; user-select: none !important; }
-  body.resizing-se, body.resizing-se * { cursor: nwse-resize !important; user-select: none !important; }
-  body.resizing-e,  body.resizing-e *  { cursor: ew-resize !important;   user-select: none !important; }
-  body.resizing-s,  body.resizing-s *  { cursor: ns-resize !important;   user-select: none !important; }
+  .splitter-h {
+    flex: 0 0 5px;
+    background: transparent;
+    cursor: ns-resize;
+    transition: background 80ms;
+    z-index: 5;
+  }
+  .splitter-v:hover, .splitter-h:hover { background: #1E93FF; }
+  body.resizing-v, body.resizing-v * { cursor: ew-resize !important; user-select: none !important; }
+  body.resizing-h, body.resizing-h * { cursor: ns-resize !important; user-select: none !important; }
 
   /* Workspace controls in topbar */
   .ws-controls { display: flex; gap: 6px; align-items: center; margin-left: auto; }
@@ -221,136 +236,152 @@
   <input type="file" id="fileInput" accept=".jsonl,.json" style="display:none;">
 
   <div class="ws-controls">
+    <button id="autofitBtn" title="Autofit: equalize lane widths and panel heights so the layout fills the viewport with even proportions">⤢ Autofit</button>
     <label style="font-size:11px;color:#666;">workspace</label>
     <select id="workspaceSelect" style="min-width:120px;"></select>
-    <button id="saveAsWsBtn" title="Save current panel layout under a new name">💾 Save as…</button>
-    <button id="resetWsBtn" title="Reset current workspace to its default layout">↺ Reset</button>
+    <button id="saveAsWsBtn" title="Save current lane widths + panel heights under a new name">💾 Save as…</button>
+    <button id="resetWsBtn" title="Reset current workspace to its default proportions">↺ Reset</button>
     <button id="deleteWsBtn" title="Delete current workspace (built-in ones can't be deleted)">🗑</button>
   </div>
 </div>
 
-<!-- ===== Workspace area: panels float here ===== -->
-<div class="workspace-area" id="workspaceArea">
+<!-- ===== Workspace: 3 lanes with splitters ===== -->
+<div class="workspace-lanes" id="workspaceLanes">
 
-  <!-- Game Stage: canvas + frame readout -->
-  <div class="panel-window" id="pw-stage">
-    <div class="panel-header"><span class="panel-title">Game Stage</span></div>
-    <div class="panel-body no-pad" style="display:flex; flex-direction:column;">
-      <div class="canvas-wrap" id="canvasWrap" style="flex:1; padding:8px; min-height:0;">
-        <canvas id="frameCanvas" width="640" height="640"></canvas>
+  <!-- LANE 1: Game stage + Controls + Playback (the player view) -->
+  <div class="lane" id="lane-stage">
+
+    <div class="panel-window" id="pw-stage">
+      <div class="panel-header"><span class="panel-title">Game Stage</span></div>
+      <div class="panel-body no-pad" style="display:flex; flex-direction:column;">
+        <div class="canvas-wrap" id="canvasWrap" style="flex:1; padding:8px; min-height:0;">
+          <canvas id="frameCanvas" width="640" height="640"></canvas>
+        </div>
+        <div class="frame-info" id="frameInfo" style="padding:6px 10px; border-top:1px solid #222; flex-shrink:0;">load a recording to begin</div>
       </div>
-      <div class="frame-info" id="frameInfo" style="padding:6px 10px; border-top:1px solid #222; flex-shrink:0;">load a recording to begin</div>
     </div>
-    <div class="resize-handle"></div>
-  </div>
 
-  <!-- Controls: D-pad + space + mouse + A7 -->
-  <div class="panel-window" id="pw-controls">
-    <div class="panel-header"><span class="panel-title">Controls</span></div>
-    <div class="panel-body">
-      <div class="controls-bar" id="controlsBar" style="border:0; padding:0; background:transparent;">
-        <div class="ctrl-group" title="ACTION1–4 — arrow keys">
-          <div class="dpad">
-            <div class="key-cap up"    id="kc-1" data-aid="1">↑<span class="sub">A1</span></div>
-            <div class="key-cap left"  id="kc-3" data-aid="3">←<span class="sub">A3</span></div>
-            <div class="key-cap down"  id="kc-2" data-aid="2">↓<span class="sub">A2</span></div>
-            <div class="key-cap right" id="kc-4" data-aid="4">→<span class="sub">A4</span></div>
+    <div class="splitter-h" data-lane="lane-stage" data-above="pw-stage" data-below="pw-controls"></div>
+
+    <div class="panel-window" id="pw-controls">
+      <div class="panel-header"><span class="panel-title">Controls</span></div>
+      <div class="panel-body">
+        <div class="controls-bar" id="controlsBar" style="border:0; padding:0; background:transparent;">
+          <div class="ctrl-group" title="ACTION1–4 — arrow keys">
+            <div class="dpad">
+              <div class="key-cap up"    id="kc-1" data-aid="1">↑<span class="sub">A1</span></div>
+              <div class="key-cap left"  id="kc-3" data-aid="3">←<span class="sub">A3</span></div>
+              <div class="key-cap down"  id="kc-2" data-aid="2">↓<span class="sub">A2</span></div>
+              <div class="key-cap right" id="kc-4" data-aid="4">→<span class="sub">A4</span></div>
+            </div>
+            <div class="ctrl-label">arrows</div>
           </div>
-          <div class="ctrl-label">arrows</div>
+          <div class="ctrl-group" title="ACTION5 — spacebar / specials">
+            <div class="key-cap space" id="kc-5" data-aid="5">⎵ SPACE<span class="sub">A5</span></div>
+            <div class="ctrl-label">space</div>
+          </div>
+          <div class="ctrl-group" title="ACTION6 — mouse click at (x,y)">
+            <div class="key-cap mouse" id="kc-6" data-aid="6">🖱 CLICK<span class="xy" id="kc-6-xy">—</span></div>
+            <div class="ctrl-label">mouse (a6)</div>
+          </div>
+          <div class="ctrl-group" title="ACTION7 — game-specific special">
+            <div class="key-cap wide" id="kc-7" data-aid="7">A7<span class="sub">A7</span></div>
+            <div class="ctrl-label">special</div>
+          </div>
+          <span class="avail-text" id="availText">available: <b>—</b></span>
         </div>
-        <div class="ctrl-group" title="ACTION5 — spacebar / specials">
-          <div class="key-cap space" id="kc-5" data-aid="5">⎵ SPACE<span class="sub">A5</span></div>
-          <div class="ctrl-label">space</div>
-        </div>
-        <div class="ctrl-group" title="ACTION6 — mouse click at (x,y)">
-          <div class="key-cap mouse" id="kc-6" data-aid="6">🖱 CLICK<span class="xy" id="kc-6-xy">—</span></div>
-          <div class="ctrl-label">mouse (a6)</div>
-        </div>
-        <div class="ctrl-group" title="ACTION7 — game-specific special">
-          <div class="key-cap wide" id="kc-7" data-aid="7">A7<span class="sub">A7</span></div>
-          <div class="ctrl-label">special</div>
-        </div>
-        <span class="avail-text" id="availText">available: <b>—</b></span>
       </div>
     </div>
-    <div class="resize-handle"></div>
-  </div>
 
-  <!-- Playback: slider + transport buttons -->
-  <div class="panel-window" id="pw-playback">
-    <div class="panel-header"><span class="panel-title">Playback</span></div>
-    <div class="panel-body" style="display:flex; flex-direction:column; gap:6px;">
-      <div class="playback" style="border:0; padding:0; background:transparent;">
-        <button class="icon" id="jumpFirst" title="Home">⏮</button>
-        <button class="icon" id="prevFrame" title="←">◀</button>
-        <button class="icon" id="playBtn" title="Space">▶</button>
-        <button class="icon" id="nextFrame" title="→">▶</button>
-        <button class="icon" id="jumpLast" title="End">⏭</button>
-        <div class="slider-wrap">
-          <canvas id="markerStripe" class="marker-stripe" height="12"></canvas>
-          <input type="range" id="slider" class="slider" min="0" max="0" value="0">
+    <div class="splitter-h" data-lane="lane-stage" data-above="pw-controls" data-below="pw-playback"></div>
+
+    <div class="panel-window" id="pw-playback">
+      <div class="panel-header"><span class="panel-title">Playback</span></div>
+      <div class="panel-body" style="display:flex; flex-direction:column; gap:6px;">
+        <div class="playback" style="border:0; padding:0; background:transparent;">
+          <button class="icon" id="jumpFirst" title="Home">⏮</button>
+          <button class="icon" id="prevFrame" title="←">◀</button>
+          <button class="icon" id="playBtn" title="Space">▶</button>
+          <button class="icon" id="nextFrame" title="→">▶</button>
+          <button class="icon" id="jumpLast" title="End">⏭</button>
+          <div class="slider-wrap">
+            <canvas id="markerStripe" class="marker-stripe" height="12"></canvas>
+            <input type="range" id="slider" class="slider" min="0" max="0" value="0">
+          </div>
+          <select id="speedSel" style="width:80px;">
+            <option value="500">2 fps</option>
+            <option value="200" selected>5 fps</option>
+            <option value="100">10 fps</option>
+            <option value="50">20 fps</option>
+          </select>
         </div>
-        <select id="speedSel" style="width:80px;">
-          <option value="500">2 fps</option>
-          <option value="200" selected>5 fps</option>
-          <option value="100">10 fps</option>
-          <option value="50">20 fps</option>
-        </select>
-      </div>
-      <div class="help" style="padding:0;">Keys: <span class="key">←</span> <span class="key">→</span> step · <span class="key">Shift+←/→</span> ±10 · <span class="key">Home/End</span> · <span class="key">[</span> <span class="key">]</span> filter prev/next · <span class="key">Space</span> play</div>
-    </div>
-    <div class="resize-handle"></div>
-  </div>
-
-  <!-- Reasoning log -->
-  <div class="panel-window" id="pw-reasoning">
-    <div class="panel-header"><span class="panel-title">Reasoning Log</span></div>
-    <div class="panel-body">
-      <div id="reasoningBox" style="font-size:13px; line-height:1.5; color:#ddd;">
-        <span style="color:#555">(no reasoning captured for this frame)</span>
+        <div class="help" style="padding:0;">Keys: <span class="key">←</span> <span class="key">→</span> step · <span class="key">Shift+←/→</span> ±10 · <span class="key">Home/End</span> · <span class="key">[</span> <span class="key">]</span> filter prev/next · <span class="key">Space</span> play</div>
       </div>
     </div>
-    <div class="resize-handle"></div>
+
   </div>
 
-  <!-- Session summary -->
-  <div class="panel-window" id="pw-summary">
-    <div class="panel-header"><span class="panel-title">Session Summary</span></div>
-    <div class="panel-body">
-      <div class="summary-grid" id="summary"></div>
-    </div>
-    <div class="resize-handle"></div>
-  </div>
+  <!-- Splitter between lane 1 and lane 2 -->
+  <div class="splitter-v" data-left="lane-stage" data-right="lane-data"></div>
 
-  <!-- Levels breakdown -->
-  <div class="panel-window" id="pw-levels">
-    <div class="panel-header"><span class="panel-title">Levels Breakdown</span></div>
-    <div class="panel-body no-pad">
-      <div class="levels-list" id="levelsBox" style="padding-top: 4px;"></div>
-      <div class="levels-hint">click a row to jump to that level's first frame</div>
-    </div>
-    <div class="resize-handle"></div>
-  </div>
+  <!-- LANE 2: Summary + Levels + Reasoning (recording metadata) -->
+  <div class="lane" id="lane-data">
 
-  <!-- Timeline -->
-  <div class="panel-window" id="pw-timeline">
-    <div class="panel-header"><span class="panel-title">Replay Events</span></div>
-    <div class="panel-body no-pad" style="display:flex; flex-direction:column;">
-      <div class="timeline" id="timeline" style="flex:1;"></div>
-      <div class="filter-bar">
-        <label style="font-size:11px;color:#666;">filter</label>
-        <select id="markerFilter">
-          <option value="all">all</option>
-          <option value="action">actions</option>
-          <option value="reaction">reactions</option>
-          <option value="decision">decisions</option>
-          <option value="result">results</option>
-          <option value="noop">no-ops</option>
-          <option value="mismatch,stuck">surprises</option>
-        </select>
+    <div class="panel-window" id="pw-summary">
+      <div class="panel-header"><span class="panel-title">Session Summary</span></div>
+      <div class="panel-body">
+        <div class="summary-grid" id="summary"></div>
       </div>
     </div>
-    <div class="resize-handle"></div>
+
+    <div class="splitter-h" data-lane="lane-data" data-above="pw-summary" data-below="pw-levels"></div>
+
+    <div class="panel-window" id="pw-levels">
+      <div class="panel-header"><span class="panel-title">Levels Breakdown</span></div>
+      <div class="panel-body no-pad">
+        <div class="levels-list" id="levelsBox" style="padding-top: 4px;"></div>
+        <div class="levels-hint">click a row to jump to that level's first frame</div>
+      </div>
+    </div>
+
+    <div class="splitter-h" data-lane="lane-data" data-above="pw-levels" data-below="pw-reasoning"></div>
+
+    <div class="panel-window" id="pw-reasoning">
+      <div class="panel-header"><span class="panel-title">Reasoning Log</span></div>
+      <div class="panel-body">
+        <div id="reasoningBox" style="font-size:13px; line-height:1.5; color:#ddd;">
+          <span style="color:#555">(no reasoning captured for this frame)</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Splitter between lane 2 and lane 3 -->
+  <div class="splitter-v" data-left="lane-data" data-right="lane-events"></div>
+
+  <!-- LANE 3: Timeline -->
+  <div class="lane" id="lane-events">
+
+    <div class="panel-window" id="pw-timeline">
+      <div class="panel-header"><span class="panel-title">Replay Events</span></div>
+      <div class="panel-body no-pad" style="display:flex; flex-direction:column;">
+        <div class="timeline" id="timeline" style="flex:1;"></div>
+        <div class="filter-bar">
+          <label style="font-size:11px;color:#666;">filter</label>
+          <select id="markerFilter">
+            <option value="all">all</option>
+            <option value="action">actions</option>
+            <option value="reaction">reactions</option>
+            <option value="decision">decisions</option>
+            <option value="result">results</option>
+            <option value="noop">no-ops</option>
+            <option value="mismatch,stuck">surprises</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
   </div>
 
 </div>
@@ -1235,265 +1266,240 @@ document.addEventListener('keydown', e => {
 });
 
 // ============================================================
-// Boot
+// Workspace: 3-lane docked layout with splitters
 // ============================================================
-// ============================================================
-// Workspace: draggable + resizable panels, saved to localStorage
-// ============================================================
-// v2 = viewport-aware built-ins. Bumping past v1 throws away the hardcoded
-// 1920x1080 positions that didn't fit smaller screens.
-const WS_STORAGE_KEY = 'agi3_workspaces_v2';
-const WS_CURRENT_KEY = 'agi3_workspace_current_v2';
+// Lane widths and panel heights are stored as flex-grow ratios. Dragging a
+// splitter shifts the ratio between two neighbors; everything else stays put.
+// The workspace always fills the viewport exactly — no overlaps possible.
+// v3 storage key: completely different model from v1/v2 (which used absolute
+// positions for free-floating panels).
+const WS_STORAGE_KEY = 'agi3_workspaces_v3';
+const WS_CURRENT_KEY = 'agi3_workspace_current_v3';
 const DEFAULT_WS_NAME = 'Compact';
 
-// Built-in layouts are computed from the current viewport so the default view
-// always fits whatever screen the user is on (instead of hardcoded 1920x1080).
-// User drag/resize edits override these via auto-save.
-function workspaceSize() {
-  return { W: window.innerWidth, H: window.innerHeight - 50 };  // 50 = topbar height
-}
-
-const BUILTIN_BUILDERS = {
-  // Compact: 3 columns. Left = stage + controls + playback stacked. Middle =
-  // summary + levels + reasoning stacked. Right = timeline full height.
-  Compact: () => {
-    const { W, H } = workspaceSize();
-    const gap = 8;
-    const leftW  = Math.max(360, Math.floor((W - 4 * gap) * 0.40));
-    const midW   = Math.max(280, Math.floor((W - 4 * gap) * 0.28));
-    const rightW = Math.max(260, W - leftW - midW - 4 * gap);
-    const ctrlH  = 110;
-    const playH  = 100;
-    const stageH = Math.max(300, H - ctrlH - playH - 4 * gap);
-    const midSumH = Math.min(260, Math.floor(H * 0.25));
-    const midLevH = Math.min(420, Math.floor(H * 0.38));
-    const midReaH = Math.max(180, H - midSumH - midLevH - 4 * gap);
-    return {
-      'pw-stage':     { x: gap,                        y: gap,                                      w: leftW,  h: stageH },
-      'pw-controls':  { x: gap,                        y: gap + stageH + gap,                       w: leftW,  h: ctrlH  },
-      'pw-playback':  { x: gap,                        y: gap + stageH + gap + ctrlH + gap,         w: leftW,  h: playH  },
-      'pw-summary':   { x: gap + leftW + gap,          y: gap,                                      w: midW,   h: midSumH },
-      'pw-levels':    { x: gap + leftW + gap,          y: gap + midSumH + gap,                      w: midW,   h: midLevH },
-      'pw-reasoning': { x: gap + leftW + gap,          y: gap + midSumH + gap + midLevH + gap,      w: midW,   h: midReaH },
-      'pw-timeline':  { x: gap + leftW + gap + midW + gap, y: gap,                                  w: rightW, h: H - 2 * gap },
-    };
+// Layout = { lanes: [{ id, w, panels: [{ id, h }] }] }
+// w/h are flex-grow numbers (relative ratios; any positive scale).
+const BUILTIN_LAYOUTS = {
+  // Wide stage on the left so the canvas + controls aren't cramped.
+  Compact: {
+    lanes: [
+      { id: 'lane-stage',  w: 50, panels: [
+        { id: 'pw-stage',     h: 72 },
+        { id: 'pw-controls',  h: 14 },
+        { id: 'pw-playback',  h: 14 },
+      ]},
+      { id: 'lane-data',   w: 25, panels: [
+        { id: 'pw-summary',   h: 22 },
+        { id: 'pw-levels',    h: 42 },
+        { id: 'pw-reasoning', h: 36 },
+      ]},
+      { id: 'lane-events', w: 25, panels: [
+        { id: 'pw-timeline',  h: 100 },
+      ]},
+    ],
   },
-  // Wide: big stage + 2 right columns. Less screen-share for the canvas? No —
-  // bigger stage actually. Controls + playback drop into the row below stage.
-  Wide: () => {
-    const { W, H } = workspaceSize();
-    const gap = 8;
-    const stageW = Math.max(500, Math.floor((W - 3 * gap) * 0.55));
-    const rightW = W - stageW - 3 * gap;
-    const ctrlH  = 100;
-    const playH  = 100;
-    const stageH = Math.max(300, H - ctrlH - playH - 4 * gap);
-    const sumH = Math.min(260, Math.floor(H * 0.25));
-    const levH = Math.min(380, Math.floor(H * 0.36));
-    const reaH = Math.max(180, H - sumH - levH - 4 * gap);
-    const halfStageW = Math.floor((stageW - gap) / 2);
-    return {
-      'pw-stage':     { x: gap,                       y: gap,                                  w: stageW,        h: stageH },
-      'pw-controls':  { x: gap,                       y: gap + stageH + gap,                   w: halfStageW,    h: ctrlH },
-      'pw-playback':  { x: gap + halfStageW + gap,    y: gap + stageH + gap,                   w: stageW - halfStageW - gap, h: ctrlH },
-      'pw-summary':   { x: gap + stageW + gap,        y: gap,                                  w: rightW,        h: sumH },
-      'pw-levels':    { x: gap + stageW + gap,        y: gap + sumH + gap,                     w: rightW,        h: levH },
-      'pw-reasoning': { x: gap + stageW + gap,        y: gap + sumH + gap + levH + gap,        w: rightW,        h: reaH },
-      // No room for separate timeline column — fold it into Reasoning? No, keep it but stacked at the bottom
-      'pw-timeline':  { x: gap,                       y: gap + stageH + gap + ctrlH + gap,     w: stageW,        h: playH },
-    };
+  // Even wider stage; thinner data + timeline columns.
+  Wide: {
+    lanes: [
+      { id: 'lane-stage',  w: 62, panels: [
+        { id: 'pw-stage',     h: 74 },
+        { id: 'pw-controls',  h: 13 },
+        { id: 'pw-playback',  h: 13 },
+      ]},
+      { id: 'lane-data',   w: 22, panels: [
+        { id: 'pw-summary',   h: 20 },
+        { id: 'pw-levels',    h: 42 },
+        { id: 'pw-reasoning', h: 38 },
+      ]},
+      { id: 'lane-events', w: 16, panels: [
+        { id: 'pw-timeline',  h: 100 },
+      ]},
+    ],
   },
-  // Fit: like Compact but tighter — fits on smaller screens (1366x768).
-  Fit: () => {
-    const { W, H } = workspaceSize();
-    const gap = 6;
-    const leftW  = Math.max(320, Math.floor((W - 3 * gap) * 0.50));
-    const rightW = W - leftW - 3 * gap;
-    const ctrlH  = 96;
-    const playH  = 88;
-    const stageH = Math.max(280, H - ctrlH - playH - 4 * gap);
-    const tlH    = Math.floor(H * 0.45);
-    const levH   = Math.floor(H * 0.30);
-    const reaH   = Math.max(140, H - tlH - levH - 4 * gap);
-    return {
-      'pw-stage':     { x: gap,                  y: gap,                              w: leftW,  h: stageH },
-      'pw-controls':  { x: gap,                  y: gap + stageH + gap,               w: leftW,  h: ctrlH },
-      'pw-playback':  { x: gap,                  y: gap + stageH + gap + ctrlH + gap, w: leftW,  h: playH },
-      'pw-timeline':  { x: gap + leftW + gap,    y: gap,                              w: rightW, h: tlH },
-      'pw-levels':    { x: gap + leftW + gap,    y: gap + tlH + gap,                  w: rightW, h: levH },
-      'pw-reasoning': { x: gap + leftW + gap,    y: gap + tlH + gap + levH + gap,     w: rightW, h: reaH },
-      // Summary tucks under stage controls — small panel
-      'pw-summary':   { x: gap,                  y: gap + stageH - 140,               w: 260,    h: 130 },
-    };
+  // Everything equal — useful as a starting point for custom layouts.
+  Equal: {
+    lanes: [
+      { id: 'lane-stage',  w: 1, panels: [
+        { id: 'pw-stage',     h: 1 },
+        { id: 'pw-controls',  h: 1 },
+        { id: 'pw-playback',  h: 1 },
+      ]},
+      { id: 'lane-data',   w: 1, panels: [
+        { id: 'pw-summary',   h: 1 },
+        { id: 'pw-levels',    h: 1 },
+        { id: 'pw-reasoning', h: 1 },
+      ]},
+      { id: 'lane-events', w: 1, panels: [
+        { id: 'pw-timeline',  h: 1 },
+      ]},
+    ],
   },
 };
-const BUILTIN_NAMES = new Set(Object.keys(BUILTIN_BUILDERS));
+const BUILTIN_NAMES = new Set(Object.keys(BUILTIN_LAYOUTS));
 
-let activeDrag = null;     // { el, dx, dy } — mouse offset within panel during drag
-let activeResize = null;   // { el, mx0, my0, w0, h0 } — start positions
-let zCounter = 100;
-
-function bringToFront(el) {
-  zCounter += 1;
-  el.style.zIndex = zCounter;
-  document.querySelectorAll('.panel-window.focused').forEach(p => p.classList.remove('focused'));
-  el.classList.add('focused');
-}
-
-function makePanelInteractive(el) {
-  const header = el.querySelector('.panel-header');
-  const cornerHandle = el.querySelector('.resize-handle');
-  if (!header || !cornerHandle) return;
-
-  header.addEventListener('mousedown', e => {
-    // Ignore clicks on form controls inside header (none today, but defensive)
-    if (e.target.closest('button, input, select, textarea')) return;
-    bringToFront(el);
-    const rect = el.getBoundingClientRect();
-    activeDrag = { el, dx: e.clientX - rect.left, dy: e.clientY - rect.top };
-    document.body.classList.add('dragging');
+// ===== Splitter drag handlers =====
+function attachVSplitterDrag(splitter) {
+  splitter.addEventListener('mousedown', e => {
+    const leftLane  = document.getElementById(splitter.dataset.left);
+    const rightLane = document.getElementById(splitter.dataset.right);
+    if (!leftLane || !rightLane) return;
+    const startX = e.clientX;
+    const w0L = leftLane.offsetWidth;
+    const w0R = rightLane.offsetWidth;
+    const sum = w0L + w0R;
+    document.body.classList.add('resizing-v');
     e.preventDefault();
+    function onMove(ev) {
+      let dx = ev.clientX - startX;
+      let newL = w0L + dx;
+      let newR = w0R - dx;
+      const min = 120;
+      if (newL < min) { newL = min; newR = sum - min; }
+      if (newR < min) { newR = min; newL = sum - min; }
+      // flex-basis is 0, so flex-grow becomes proportional to pixel width.
+      // Setting grow values in pixel-equivalents keeps OTHER lanes undisturbed
+      // because their grows + basis 0 share the remaining viewport space.
+      leftLane.style.flexGrow  = newL;
+      rightLane.style.flexGrow = newR;
+      onLayoutResize();
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.classList.remove('resizing-v');
+      autoSaveCurrentLayout();
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   });
-
-  // Wire the existing corner handle (resizes both width + height)
-  attachResizeHandle(cornerHandle, el, 'se');
-
-  // Inject right + bottom edge handles for width-only / height-only resize
-  for (const side of ['right', 'bottom']) {
-    const edge = document.createElement('div');
-    edge.className = 'resize-edge ' + side;
-    el.appendChild(edge);
-    attachResizeHandle(edge, el, side === 'right' ? 'e' : 's');
-  }
-
-  // Click anywhere on the panel body brings it to front
-  el.addEventListener('mousedown', () => bringToFront(el), { capture: true });
 }
 
-function attachResizeHandle(handleEl, panelEl, dir) {
-  handleEl.addEventListener('mousedown', e => {
-    bringToFront(panelEl);
-    activeResize = {
-      el: panelEl,
-      mx0: e.clientX, my0: e.clientY,
-      w0: panelEl.offsetWidth, h0: panelEl.offsetHeight,
-      dir,  // 'e' = east (width), 's' = south (height), 'se' = both
-    };
-    document.body.classList.add('resizing-' + dir);
+function attachHSplitterDrag(splitter) {
+  splitter.addEventListener('mousedown', e => {
+    const aboveEl = document.getElementById(splitter.dataset.above);
+    const belowEl = document.getElementById(splitter.dataset.below);
+    if (!aboveEl || !belowEl) return;
+    const startY = e.clientY;
+    const h0A = aboveEl.offsetHeight;
+    const h0B = belowEl.offsetHeight;
+    const sum = h0A + h0B;
+    document.body.classList.add('resizing-h');
     e.preventDefault();
-    e.stopPropagation();
+    function onMove(ev) {
+      let dy = ev.clientY - startY;
+      let newA = h0A + dy;
+      let newB = h0B - dy;
+      const min = 70;
+      if (newA < min) { newA = min; newB = sum - min; }
+      if (newB < min) { newB = min; newA = sum - min; }
+      aboveEl.style.flexGrow = newA;
+      belowEl.style.flexGrow = newB;
+      onLayoutResize();
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.classList.remove('resizing-h');
+      autoSaveCurrentLayout();
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   });
 }
 
-document.addEventListener('mousemove', e => {
-  if (activeDrag) {
-    const { el, dx, dy } = activeDrag;
-    const topbarH = 50;
-    el.style.left = Math.max(0, e.clientX - dx) + 'px';
-    el.style.top  = Math.max(0, e.clientY - dy - topbarH) + 'px';
-  } else if (activeResize) {
-    const { el, mx0, my0, w0, h0, dir } = activeResize;
-    if (dir.includes('e')) {
-      el.style.width  = Math.max(180, w0 + (e.clientX - mx0)) + 'px';
-    }
-    if (dir.includes('s')) {
-      el.style.height = Math.max(100, h0 + (e.clientY - my0)) + 'px';
-    }
-    onPanelResize(el);
-  }
-});
-
-document.addEventListener('mouseup', () => {
-  if (activeDrag || activeResize) {
-    activeDrag = null;
-    activeResize = null;
-    document.body.classList.remove('dragging', 'resizing-se', 'resizing-e', 'resizing-s');
-    autoSaveCurrentLayout();
-  }
-});
-
-// Some panels have content that depends on their current pixel size
-function onPanelResize(el) {
-  if (el.id === 'pw-stage' && frames.length) render();
-  if (el.id === 'pw-playback') drawMarkerStripe();
-}
-
-// ----- Layout serialize / apply -----
-function captureLayout() {
-  const out = {};
-  document.querySelectorAll('.panel-window').forEach(el => {
-    out[el.id] = {
-      x: el.offsetLeft, y: el.offsetTop,
-      w: el.offsetWidth, h: el.offsetHeight,
-    };
+// Re-render content that depends on pixel sizes after a splitter move.
+// Throttled via requestAnimationFrame so rapid mouse-moves coalesce.
+let _layoutRAF = null;
+function onLayoutResize() {
+  if (_layoutRAF) return;
+  _layoutRAF = requestAnimationFrame(() => {
+    _layoutRAF = null;
+    if (frames.length) render();
+    drawMarkerStripe();
   });
-  return out;
 }
 
+// ===== Autofit: equalize all lanes and panels so everything fills evenly =====
+function autofitWorkspace() {
+  document.querySelectorAll('.lane').forEach(laneEl => {
+    laneEl.style.flexGrow = 1;
+    laneEl.style.flexBasis = '0';
+    laneEl.querySelectorAll('.panel-window').forEach(pEl => {
+      pEl.style.flexGrow = 1;
+      pEl.style.flexBasis = '0';
+    });
+  });
+  onLayoutResize();
+  autoSaveCurrentLayout();
+}
+
+// ===== Layout serialize / apply =====
 function applyLayout(layout) {
-  if (!layout) return;
-  for (const [id, p] of Object.entries(layout)) {
-    const el = document.getElementById(id);
-    if (!el) continue;
-    el.style.left = p.x + 'px';
-    el.style.top = p.y + 'px';
-    el.style.width = p.w + 'px';
-    el.style.height = p.h + 'px';
+  if (!layout || !layout.lanes) return;
+  for (const laneSpec of layout.lanes) {
+    const laneEl = document.getElementById(laneSpec.id);
+    if (!laneEl) continue;
+    laneEl.style.flexGrow = laneSpec.w;
+    laneEl.style.flexBasis = '0';
+    for (const panelSpec of (laneSpec.panels || [])) {
+      const pEl = document.getElementById(panelSpec.id);
+      if (!pEl) continue;
+      pEl.style.flexGrow = panelSpec.h;
+      pEl.style.flexBasis = '0';
+    }
   }
-  // Re-render anything size-dependent
-  if (frames.length) render();
-  drawMarkerStripe();
+  onLayoutResize();
 }
 
-// ----- Workspace storage (user-named saves) -----
+function captureLayout() {
+  const lanes = [];
+  document.querySelectorAll('.lane').forEach(laneEl => {
+    const panels = [];
+    laneEl.querySelectorAll('.panel-window').forEach(pEl => {
+      panels.push({ id: pEl.id, h: parseFloat(pEl.style.flexGrow) || pEl.offsetHeight });
+    });
+    lanes.push({ id: laneEl.id, w: parseFloat(laneEl.style.flexGrow) || laneEl.offsetWidth, panels });
+  });
+  return { lanes };
+}
+
+// ===== Workspace storage (named saves) =====
 function loadAllWorkspaces() {
   try {
     const raw = localStorage.getItem(WS_STORAGE_KEY);
     return raw ? JSON.parse(raw) : {};
   } catch { return {}; }
 }
-
 function saveAllWorkspaces(map) {
   localStorage.setItem(WS_STORAGE_KEY, JSON.stringify(map));
 }
-
 function getCurrentWorkspaceName() {
   return localStorage.getItem(WS_CURRENT_KEY) || DEFAULT_WS_NAME;
 }
-
 function setCurrentWorkspaceName(name) {
   localStorage.setItem(WS_CURRENT_KEY, name);
 }
-
 function getEffectiveLayout(name) {
-  // User saves override built-in defaults for the same name. Built-ins are
-  // computed from the current viewport so the default always fits the screen.
+  // User saves override built-in defaults for the same name
   const all = loadAllWorkspaces();
   if (all[name]) return all[name];
-  const builder = BUILTIN_BUILDERS[name] || BUILTIN_BUILDERS[DEFAULT_WS_NAME];
-  return builder();
+  return BUILTIN_LAYOUTS[name] || BUILTIN_LAYOUTS[DEFAULT_WS_NAME];
 }
-
 function listAllWorkspaceNames() {
   const all = loadAllWorkspaces();
-  const names = new Set([...Object.keys(BUILTIN_BUILDERS), ...Object.keys(all)]);
-  return Array.from(names).sort();
+  return Array.from(new Set([...Object.keys(BUILTIN_LAYOUTS), ...Object.keys(all)])).sort();
 }
-
 function autoSaveCurrentLayout() {
-  // Persist any drag/resize change under the current workspace name.
   const name = getCurrentWorkspaceName();
   const all = loadAllWorkspaces();
   all[name] = captureLayout();
   saveAllWorkspaces(all);
 }
-
 function switchWorkspace(name) {
   setCurrentWorkspaceName(name);
   applyLayout(getEffectiveLayout(name));
   updateWorkspaceDropdown();
 }
-
 function saveAsNewWorkspace(name) {
   if (!name || !name.trim()) return;
   name = name.trim();
@@ -1503,25 +1509,22 @@ function saveAsNewWorkspace(name) {
   setCurrentWorkspaceName(name);
   updateWorkspaceDropdown();
 }
-
 function resetCurrentWorkspace() {
   const name = getCurrentWorkspaceName();
-  if (BUILTIN_BUILDERS[name]) {
-    // Drop the user override so the built-in default (computed for current
-    // viewport) takes effect
+  if (BUILTIN_LAYOUTS[name]) {
+    // Drop the user override so the built-in default takes effect
     const all = loadAllWorkspaces();
     delete all[name];
     saveAllWorkspaces(all);
-    applyLayout(BUILTIN_BUILDERS[name]());
+    applyLayout(BUILTIN_LAYOUTS[name]);
   } else {
     // Custom workspace — reset means revert to Compact baseline
-    applyLayout(BUILTIN_BUILDERS[DEFAULT_WS_NAME]());
+    applyLayout(BUILTIN_LAYOUTS[DEFAULT_WS_NAME]);
     const all = loadAllWorkspaces();
     all[name] = captureLayout();
     saveAllWorkspaces(all);
   }
 }
-
 function deleteCurrentWorkspace() {
   const name = getCurrentWorkspaceName();
   if (BUILTIN_NAMES.has(name)) {
@@ -1534,7 +1537,6 @@ function deleteCurrentWorkspace() {
   saveAllWorkspaces(all);
   switchWorkspace(DEFAULT_WS_NAME);
 }
-
 function updateWorkspaceDropdown() {
   const sel = $('workspaceSelect');
   if (!sel) return;
@@ -1547,29 +1549,27 @@ function updateWorkspaceDropdown() {
 }
 
 function initWorkspace() {
-  // Make every panel-window draggable + resizable
-  document.querySelectorAll('.panel-window').forEach(makePanelInteractive);
-  // Apply the saved/current workspace
-  const name = getCurrentWorkspaceName();
-  applyLayout(getEffectiveLayout(name));
+  // Wire vertical splitters (between lanes) and horizontal splitters (within lanes)
+  document.querySelectorAll('.splitter-v').forEach(attachVSplitterDrag);
+  document.querySelectorAll('.splitter-h').forEach(attachHSplitterDrag);
+  // Apply the current workspace (saved layout or built-in default)
+  applyLayout(getEffectiveLayout(getCurrentWorkspaceName()));
   updateWorkspaceDropdown();
-  // Bring stage to front by default so the playhead-action ring isn't hidden
-  const stage = $('pw-stage');
-  if (stage) bringToFront(stage);
 }
 
-// Wire workspace topbar controls
+// Wire topbar workspace controls
+wire('autofitBtn',      'onclick',  autofitWorkspace);
 wire('workspaceSelect', 'onchange', e => switchWorkspace(e.target.value));
 wire('saveAsWsBtn',     'onclick',  () => {
-  const name = prompt('Save current layout as…\n(letters, numbers, spaces — built-in names get overridden under your local save)', '');
+  const name = prompt('Save current layout as…', '');
   if (name) saveAsNewWorkspace(name);
 });
 wire('resetWsBtn',      'onclick',  () => {
-  if (confirm(`Reset "${getCurrentWorkspaceName()}" to its default layout?`)) resetCurrentWorkspace();
+  if (confirm(`Reset "${getCurrentWorkspaceName()}" to its default proportions?`)) resetCurrentWorkspace();
 });
 wire('deleteWsBtn',     'onclick',  deleteCurrentWorkspace);
 
-// Boot the panel system before manifest load so the page is positioned correctly
+// Boot the workspace before manifest load so panels are sized correctly
 initWorkspace();
 loadManifest();
 </script>
