@@ -46,8 +46,16 @@
     z-index: 5;
   }
   .resize-handle:hover { background: linear-gradient(135deg, transparent 50%, #1E93FF 50%, #1E93FF 60%, transparent 60%, transparent 75%, #1E93FF 75%, #1E93FF 85%, transparent 85%); }
+  /* Edge resize handles (right, bottom). Injected by JS so all panels get them.
+     Corner handle is the existing .resize-handle. */
+  .resize-edge { position: absolute; background: transparent; z-index: 4; }
+  .resize-edge.right  { right: 0; top: 0; bottom: 14px; width: 6px; cursor: ew-resize; }
+  .resize-edge.bottom { bottom: 0; left: 0; right: 14px; height: 6px; cursor: ns-resize; }
+  .resize-edge:hover { background: rgba(30, 147, 255, 0.2); }
   body.dragging, body.dragging * { cursor: grabbing !important; user-select: none !important; }
-  body.resizing, body.resizing * { cursor: nwse-resize !important; user-select: none !important; }
+  body.resizing-se, body.resizing-se * { cursor: nwse-resize !important; user-select: none !important; }
+  body.resizing-e,  body.resizing-e *  { cursor: ew-resize !important;   user-select: none !important; }
+  body.resizing-s,  body.resizing-s *  { cursor: ns-resize !important;   user-select: none !important; }
 
   /* Workspace controls in topbar */
   .ws-controls { display: flex; gap: 6px; align-items: center; margin-left: auto; }
@@ -1232,34 +1240,94 @@ document.addEventListener('keydown', e => {
 // ============================================================
 // Workspace: draggable + resizable panels, saved to localStorage
 // ============================================================
-const WS_STORAGE_KEY = 'agi3_workspaces_v1';
-const WS_CURRENT_KEY = 'agi3_workspace_current_v1';
+// v2 = viewport-aware built-ins. Bumping past v1 throws away the hardcoded
+// 1920x1080 positions that didn't fit smaller screens.
+const WS_STORAGE_KEY = 'agi3_workspaces_v2';
+const WS_CURRENT_KEY = 'agi3_workspace_current_v2';
 const DEFAULT_WS_NAME = 'Compact';
 
-// Default panel positions. Tuned for a 1920x1080 viewport (minus 50px topbar).
-// On smaller screens panels will overflow — the user can drag/resize to fix.
-const BUILTIN_LAYOUTS = {
-  Compact: {
-    'pw-stage':     { x: 10,   y: 10,  w: 720, h: 760 },
-    'pw-controls':  { x: 10,   y: 778, w: 720, h: 110 },
-    'pw-playback':  { x: 10,   y: 896, w: 720, h: 100 },
-    'pw-summary':   { x: 738,  y: 10,  w: 380, h: 270 },
-    'pw-levels':    { x: 738,  y: 288, w: 580, h: 380 },
-    'pw-reasoning': { x: 738,  y: 676, w: 580, h: 320 },
-    'pw-timeline':  { x: 1326, y: 10,  w: 580, h: 986 },
+// Built-in layouts are computed from the current viewport so the default view
+// always fits whatever screen the user is on (instead of hardcoded 1920x1080).
+// User drag/resize edits override these via auto-save.
+function workspaceSize() {
+  return { W: window.innerWidth, H: window.innerHeight - 50 };  // 50 = topbar height
+}
+
+const BUILTIN_BUILDERS = {
+  // Compact: 3 columns. Left = stage + controls + playback stacked. Middle =
+  // summary + levels + reasoning stacked. Right = timeline full height.
+  Compact: () => {
+    const { W, H } = workspaceSize();
+    const gap = 8;
+    const leftW  = Math.max(360, Math.floor((W - 4 * gap) * 0.40));
+    const midW   = Math.max(280, Math.floor((W - 4 * gap) * 0.28));
+    const rightW = Math.max(260, W - leftW - midW - 4 * gap);
+    const ctrlH  = 110;
+    const playH  = 100;
+    const stageH = Math.max(300, H - ctrlH - playH - 4 * gap);
+    const midSumH = Math.min(260, Math.floor(H * 0.25));
+    const midLevH = Math.min(420, Math.floor(H * 0.38));
+    const midReaH = Math.max(180, H - midSumH - midLevH - 4 * gap);
+    return {
+      'pw-stage':     { x: gap,                        y: gap,                                      w: leftW,  h: stageH },
+      'pw-controls':  { x: gap,                        y: gap + stageH + gap,                       w: leftW,  h: ctrlH  },
+      'pw-playback':  { x: gap,                        y: gap + stageH + gap + ctrlH + gap,         w: leftW,  h: playH  },
+      'pw-summary':   { x: gap + leftW + gap,          y: gap,                                      w: midW,   h: midSumH },
+      'pw-levels':    { x: gap + leftW + gap,          y: gap + midSumH + gap,                      w: midW,   h: midLevH },
+      'pw-reasoning': { x: gap + leftW + gap,          y: gap + midSumH + gap + midLevH + gap,      w: midW,   h: midReaH },
+      'pw-timeline':  { x: gap + leftW + gap + midW + gap, y: gap,                                  w: rightW, h: H - 2 * gap },
+    };
   },
-  Wide: {
-    // Big game stage, single right column with everything stacked
-    'pw-stage':     { x: 10,   y: 10,  w: 980, h: 880 },
-    'pw-controls':  { x: 10,   y: 898, w: 600, h: 98  },
-    'pw-playback':  { x: 618,  y: 898, w: 372, h: 98  },
-    'pw-summary':   { x: 998,  y: 10,  w: 460, h: 260 },
-    'pw-levels':    { x: 998,  y: 278, w: 460, h: 340 },
-    'pw-reasoning': { x: 998,  y: 626, w: 460, h: 370 },
-    'pw-timeline':  { x: 1466, y: 10,  w: 440, h: 986 },
+  // Wide: big stage + 2 right columns. Less screen-share for the canvas? No —
+  // bigger stage actually. Controls + playback drop into the row below stage.
+  Wide: () => {
+    const { W, H } = workspaceSize();
+    const gap = 8;
+    const stageW = Math.max(500, Math.floor((W - 3 * gap) * 0.55));
+    const rightW = W - stageW - 3 * gap;
+    const ctrlH  = 100;
+    const playH  = 100;
+    const stageH = Math.max(300, H - ctrlH - playH - 4 * gap);
+    const sumH = Math.min(260, Math.floor(H * 0.25));
+    const levH = Math.min(380, Math.floor(H * 0.36));
+    const reaH = Math.max(180, H - sumH - levH - 4 * gap);
+    const halfStageW = Math.floor((stageW - gap) / 2);
+    return {
+      'pw-stage':     { x: gap,                       y: gap,                                  w: stageW,        h: stageH },
+      'pw-controls':  { x: gap,                       y: gap + stageH + gap,                   w: halfStageW,    h: ctrlH },
+      'pw-playback':  { x: gap + halfStageW + gap,    y: gap + stageH + gap,                   w: stageW - halfStageW - gap, h: ctrlH },
+      'pw-summary':   { x: gap + stageW + gap,        y: gap,                                  w: rightW,        h: sumH },
+      'pw-levels':    { x: gap + stageW + gap,        y: gap + sumH + gap,                     w: rightW,        h: levH },
+      'pw-reasoning': { x: gap + stageW + gap,        y: gap + sumH + gap + levH + gap,        w: rightW,        h: reaH },
+      // No room for separate timeline column — fold it into Reasoning? No, keep it but stacked at the bottom
+      'pw-timeline':  { x: gap,                       y: gap + stageH + gap + ctrlH + gap,     w: stageW,        h: playH },
+    };
+  },
+  // Fit: like Compact but tighter — fits on smaller screens (1366x768).
+  Fit: () => {
+    const { W, H } = workspaceSize();
+    const gap = 6;
+    const leftW  = Math.max(320, Math.floor((W - 3 * gap) * 0.50));
+    const rightW = W - leftW - 3 * gap;
+    const ctrlH  = 96;
+    const playH  = 88;
+    const stageH = Math.max(280, H - ctrlH - playH - 4 * gap);
+    const tlH    = Math.floor(H * 0.45);
+    const levH   = Math.floor(H * 0.30);
+    const reaH   = Math.max(140, H - tlH - levH - 4 * gap);
+    return {
+      'pw-stage':     { x: gap,                  y: gap,                              w: leftW,  h: stageH },
+      'pw-controls':  { x: gap,                  y: gap + stageH + gap,               w: leftW,  h: ctrlH },
+      'pw-playback':  { x: gap,                  y: gap + stageH + gap + ctrlH + gap, w: leftW,  h: playH },
+      'pw-timeline':  { x: gap + leftW + gap,    y: gap,                              w: rightW, h: tlH },
+      'pw-levels':    { x: gap + leftW + gap,    y: gap + tlH + gap,                  w: rightW, h: levH },
+      'pw-reasoning': { x: gap + leftW + gap,    y: gap + tlH + gap + levH + gap,     w: rightW, h: reaH },
+      // Summary tucks under stage controls — small panel
+      'pw-summary':   { x: gap,                  y: gap + stageH - 140,               w: 260,    h: 130 },
+    };
   },
 };
-const BUILTIN_NAMES = new Set(Object.keys(BUILTIN_LAYOUTS));
+const BUILTIN_NAMES = new Set(Object.keys(BUILTIN_BUILDERS));
 
 let activeDrag = null;     // { el, dx, dy } — mouse offset within panel during drag
 let activeResize = null;   // { el, mx0, my0, w0, h0 } — start positions
@@ -1274,8 +1342,8 @@ function bringToFront(el) {
 
 function makePanelInteractive(el) {
   const header = el.querySelector('.panel-header');
-  const handle = el.querySelector('.resize-handle');
-  if (!header || !handle) return;
+  const cornerHandle = el.querySelector('.resize-handle');
+  if (!header || !cornerHandle) return;
 
   header.addEventListener('mousedown', e => {
     // Ignore clicks on form controls inside header (none today, but defensive)
@@ -1287,16 +1355,34 @@ function makePanelInteractive(el) {
     e.preventDefault();
   });
 
-  handle.addEventListener('mousedown', e => {
-    bringToFront(el);
-    activeResize = { el, mx0: e.clientX, my0: e.clientY, w0: el.offsetWidth, h0: el.offsetHeight };
-    document.body.classList.add('resizing');
+  // Wire the existing corner handle (resizes both width + height)
+  attachResizeHandle(cornerHandle, el, 'se');
+
+  // Inject right + bottom edge handles for width-only / height-only resize
+  for (const side of ['right', 'bottom']) {
+    const edge = document.createElement('div');
+    edge.className = 'resize-edge ' + side;
+    el.appendChild(edge);
+    attachResizeHandle(edge, el, side === 'right' ? 'e' : 's');
+  }
+
+  // Click anywhere on the panel body brings it to front
+  el.addEventListener('mousedown', () => bringToFront(el), { capture: true });
+}
+
+function attachResizeHandle(handleEl, panelEl, dir) {
+  handleEl.addEventListener('mousedown', e => {
+    bringToFront(panelEl);
+    activeResize = {
+      el: panelEl,
+      mx0: e.clientX, my0: e.clientY,
+      w0: panelEl.offsetWidth, h0: panelEl.offsetHeight,
+      dir,  // 'e' = east (width), 's' = south (height), 'se' = both
+    };
+    document.body.classList.add('resizing-' + dir);
     e.preventDefault();
     e.stopPropagation();
   });
-
-  // Click anywhere on the panel body brings it to front (helps the focused outline track focus)
-  el.addEventListener('mousedown', () => bringToFront(el), { capture: true });
 }
 
 document.addEventListener('mousemove', e => {
@@ -1306,11 +1392,13 @@ document.addEventListener('mousemove', e => {
     el.style.left = Math.max(0, e.clientX - dx) + 'px';
     el.style.top  = Math.max(0, e.clientY - dy - topbarH) + 'px';
   } else if (activeResize) {
-    const { el, mx0, my0, w0, h0 } = activeResize;
-    const newW = Math.max(180, w0 + (e.clientX - mx0));
-    const newH = Math.max(100, h0 + (e.clientY - my0));
-    el.style.width  = newW + 'px';
-    el.style.height = newH + 'px';
+    const { el, mx0, my0, w0, h0, dir } = activeResize;
+    if (dir.includes('e')) {
+      el.style.width  = Math.max(180, w0 + (e.clientX - mx0)) + 'px';
+    }
+    if (dir.includes('s')) {
+      el.style.height = Math.max(100, h0 + (e.clientY - my0)) + 'px';
+    }
     onPanelResize(el);
   }
 });
@@ -1319,7 +1407,7 @@ document.addEventListener('mouseup', () => {
   if (activeDrag || activeResize) {
     activeDrag = null;
     activeResize = null;
-    document.body.classList.remove('dragging', 'resizing');
+    document.body.classList.remove('dragging', 'resizing-se', 'resizing-e', 'resizing-s');
     autoSaveCurrentLayout();
   }
 });
@@ -1378,16 +1466,17 @@ function setCurrentWorkspaceName(name) {
 }
 
 function getEffectiveLayout(name) {
-  // User saves override built-in defaults for the same name
+  // User saves override built-in defaults for the same name. Built-ins are
+  // computed from the current viewport so the default always fits the screen.
   const all = loadAllWorkspaces();
   if (all[name]) return all[name];
-  if (BUILTIN_LAYOUTS[name]) return BUILTIN_LAYOUTS[name];
-  return BUILTIN_LAYOUTS[DEFAULT_WS_NAME];
+  const builder = BUILTIN_BUILDERS[name] || BUILTIN_BUILDERS[DEFAULT_WS_NAME];
+  return builder();
 }
 
 function listAllWorkspaceNames() {
   const all = loadAllWorkspaces();
-  const names = new Set([...Object.keys(BUILTIN_LAYOUTS), ...Object.keys(all)]);
+  const names = new Set([...Object.keys(BUILTIN_BUILDERS), ...Object.keys(all)]);
   return Array.from(names).sort();
 }
 
@@ -1417,15 +1506,16 @@ function saveAsNewWorkspace(name) {
 
 function resetCurrentWorkspace() {
   const name = getCurrentWorkspaceName();
-  if (BUILTIN_LAYOUTS[name]) {
-    // Drop the user override so the built-in default takes effect
+  if (BUILTIN_BUILDERS[name]) {
+    // Drop the user override so the built-in default (computed for current
+    // viewport) takes effect
     const all = loadAllWorkspaces();
     delete all[name];
     saveAllWorkspaces(all);
-    applyLayout(BUILTIN_LAYOUTS[name]);
+    applyLayout(BUILTIN_BUILDERS[name]());
   } else {
     // Custom workspace — reset means revert to Compact baseline
-    applyLayout(BUILTIN_LAYOUTS[DEFAULT_WS_NAME]);
+    applyLayout(BUILTIN_BUILDERS[DEFAULT_WS_NAME]());
     const all = loadAllWorkspaces();
     all[name] = captureLayout();
     saveAllWorkspaces(all);
