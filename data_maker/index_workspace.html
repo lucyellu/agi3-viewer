@@ -1,0 +1,1487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ARC-AGI-3 Replay + Workspace</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #0a0a0a; color: #e0e0e0; font-family: ui-monospace, Menlo, "Courier New", monospace; font-size: 13px; height: 100%; overflow: hidden; }
+
+  /* === Workspace layout: topbar pinned, panels float on the workspace area === */
+  .topbar-fixed {
+    position: fixed; top: 0; left: 0; right: 0;
+    height: 50px; padding: 6px 12px;
+    background: #0a0a0a; border-bottom: 1px solid #222;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    z-index: 10000;
+  }
+  .workspace-area {
+    position: fixed; top: 50px; left: 0; right: 0; bottom: 0;
+    background: #050505;
+  }
+  .panel-window {
+    position: absolute;
+    background: #141414; border: 1px solid #222; border-radius: 4px;
+    display: flex; flex-direction: column;
+    min-width: 180px; min-height: 100px;
+    overflow: hidden;
+  }
+  .panel-window.focused { border-color: #2a4055; box-shadow: 0 0 0 1px #1E93FF inset; }
+  .panel-header {
+    background: #1a1a1a; border-bottom: 1px solid #222;
+    padding: 4px 8px; flex-shrink: 0;
+    display: flex; align-items: center; gap: 8px;
+    cursor: grab; user-select: none;
+  }
+  .panel-header.dragging { cursor: grabbing; }
+  .panel-window.focused .panel-header { background: #1f2a3a; }
+  .panel-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: #888; font-weight: 600; }
+  .panel-window.focused .panel-title { color: #88D8F1; }
+  .panel-body { flex: 1; min-height: 0; overflow: auto; padding: 10px; position: relative; }
+  .panel-body.no-pad { padding: 0; }
+  .resize-handle {
+    position: absolute; right: 0; bottom: 0; width: 14px; height: 14px;
+    cursor: nwse-resize;
+    background: linear-gradient(135deg, transparent 50%, #2a2a2a 50%, #2a2a2a 60%, transparent 60%, transparent 75%, #2a2a2a 75%, #2a2a2a 85%, transparent 85%);
+    z-index: 5;
+  }
+  .resize-handle:hover { background: linear-gradient(135deg, transparent 50%, #1E93FF 50%, #1E93FF 60%, transparent 60%, transparent 75%, #1E93FF 75%, #1E93FF 85%, transparent 85%); }
+  body.dragging, body.dragging * { cursor: grabbing !important; user-select: none !important; }
+  body.resizing, body.resizing * { cursor: nwse-resize !important; user-select: none !important; }
+
+  /* Workspace controls in topbar */
+  .ws-controls { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+  .ws-controls button { padding: 3px 8px; }
+
+  .panel { background: #141414; border: 1px solid #222; border-radius: 4px; padding: 10px; }
+  h2 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: #888; font-weight: 600; }
+  select, input, button { background: #1a1a1a; color: #e0e0e0; border: 1px solid #333; padding: 4px 8px; font-family: inherit; font-size: 12px; border-radius: 3px; }
+  button { cursor: pointer; }
+  button:hover { background: #252525; border-color: #444; }
+  button.icon { padding: 4px 8px; min-width: 32px; }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .topbar { display: flex; gap: 12px; align-items: center; padding: 6px 0; }
+  .title { font-size: 18px; font-weight: 600; color: #FFDC00; letter-spacing: 0.02em; }
+  .branch-badge { font-size: 10px; padding: 2px 6px; border-radius: 3px; background: #1f2a3a; color: #88D8F1; border: 1px solid #2a4055; letter-spacing: 0.05em; margin-right: auto; font-weight: 500; }
+  .branch-badge.main { background: #1a1a1a; color: #888; border-color: #333; }
+  .v2-badge { font-size: 10px; padding: 2px 6px; border-radius: 3px; background: #2a1f3a; color: #A356D6; border: 1px solid #4a2f5a; letter-spacing: 0.05em; font-weight: 600; }
+  .game-status-badge { font-size: 10px; padding: 2px 8px; border-radius: 3px; letter-spacing: 0.05em; font-weight: 700; border: 1px solid currentColor; }
+  .canvas-wrap { flex: 1; min-height: 0; background: #000; border: 1px solid #222; border-radius: 4px; display: flex; align-items: center; justify-content: center; padding: 12px; }
+  canvas { image-rendering: pixelated; max-width: 100%; max-height: 100%; }
+  .playback { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #141414; border: 1px solid #222; border-radius: 4px; }
+  .slider-wrap { position: relative; flex: 1; height: 24px; display: flex; align-items: center; }
+  .marker-stripe { position: absolute; left: 0; right: 0; top: 6px; height: 12px; pointer-events: none; image-rendering: pixelated; border-radius: 2px; opacity: 0.85; }
+  .slider-wrap .slider { position: relative; width: 100%; margin: 0; background: transparent; z-index: 2; }
+  .slider-wrap .slider::-webkit-slider-runnable-track { background: transparent; height: 12px; }
+  .slider-wrap .slider::-moz-range-track { background: transparent; height: 12px; }
+  .slider-wrap .slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 4px; height: 22px; background: #fff; border: 1px solid #000; border-radius: 1px; margin-top: -5px; cursor: pointer; }
+  .slider-wrap .slider::-moz-range-thumb { width: 4px; height: 22px; background: #fff; border: 1px solid #000; border-radius: 1px; cursor: pointer; }
+  .frame-info { font-size: 12px; color: #aaa; min-width: 100px; }
+  .marker-badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #000; }
+  .summary-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12px; }
+  .summary-grid b { color: #888; font-weight: normal; }
+  .timeline { flex: 1; overflow-y: auto; min-height: 0; }
+  .timeline-item { padding: 6px 10px; border-bottom: 1px solid #1a1a1a; cursor: pointer; display: flex; gap: 8px; align-items: center; font-size: 11px; }
+  .timeline-item:hover { background: #1a1a1a; }
+  .timeline-item.active { background: #1f2a3a; border-left: 2px solid #1E93FF; padding-left: 8px; }
+  .timeline-item .idx { color: #555; width: 36px; text-align: right; flex-shrink: 0; }
+  .timeline-item .action { color: #ddd; width: 96px; flex-shrink: 0; font-weight: 600; letter-spacing: 0.02em; }
+  .timeline-item .action .emoji { display: inline-block; width: 18px; text-align: center; margin-right: 4px; font-weight: normal; }
+  .timeline-item .action.act-none { color: #444; font-weight: normal; }
+  .timeline-item .marker-badge { font-size: 9px; padding: 1px 6px; }
+  .error { color: #F93C31; padding: 8px; background: #2a0000; border-radius: 3px; }
+  .filter-bar { padding: 8px 10px; background: #141414; border-top: 1px solid #222; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .filter-bar select { flex: 1; }
+  .key { background: #222; padding: 1px 5px; border-radius: 2px; font-size: 10px; color: #aaa; }
+  .help { font-size: 10px; color: #555; padding: 4px 0; }
+
+  /* === Controls strip === */
+  .controls-bar {
+    display: flex; gap: 16px; align-items: center;
+    padding: 10px 14px;
+    background: #141414; border: 1px solid #222; border-radius: 4px;
+    flex-wrap: wrap;
+  }
+  .ctrl-group { display: flex; flex-direction: column; gap: 2px; align-items: center; }
+  .ctrl-group .ctrl-label { font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 0.1em; }
+
+  /* D-pad: 3-column grid, arrows in + shape */
+  .dpad { display: grid; grid-template-columns: repeat(3, 32px); grid-template-rows: repeat(3, 32px); gap: 2px; }
+  .dpad .key-cap.up    { grid-column: 2; grid-row: 1; }
+  .dpad .key-cap.left  { grid-column: 1; grid-row: 2; }
+  .dpad .key-cap.down  { grid-column: 2; grid-row: 2; }
+  .dpad .key-cap.right { grid-column: 3; grid-row: 2; }
+
+  .key-cap {
+    background: #1a1a1a; border: 1px solid #333; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; color: #888;
+    min-width: 32px; height: 32px; padding: 0 6px;
+    position: relative;
+    transition: background 80ms, border-color 80ms, color 80ms, box-shadow 80ms;
+  }
+  .key-cap .sub { position: absolute; bottom: 2px; right: 4px; font-size: 8px; color: #444; }
+  .key-cap.wide  { min-width: 90px; }
+  .key-cap.space { min-width: 140px; }
+  .key-cap.mouse { min-width: 90px; flex-direction: column; gap: 2px; height: auto; padding: 6px 10px; font-size: 12px; }
+  .key-cap.mouse .xy { font-size: 10px; color: #666; }
+
+  /* Active = the action this frame represents */
+  .key-cap.active {
+    background: #1E93FF;
+    border-color: #88D8F1;
+    color: #000;
+    box-shadow: 0 0 0 2px rgba(30,147,255,0.35), 0 0 12px rgba(30,147,255,0.6);
+  }
+  .key-cap.active .sub { color: rgba(0,0,0,0.6); }
+  .key-cap.active.click-active {
+    background: #FFDC00;
+    border-color: #fff;
+    box-shadow: 0 0 0 2px rgba(255,220,0,0.35), 0 0 12px rgba(255,220,0,0.6);
+  }
+  .key-cap.active.click-active .xy { color: rgba(0,0,0,0.7); }
+
+  /* Unavailable in this game's action set */
+  .key-cap.unavailable {
+    opacity: 0.18;
+    border-style: dashed;
+    color: #444;
+  }
+
+  .avail-text { font-size: 11px; color: #666; margin-left: auto; }
+  .avail-text b { color: #aaa; font-weight: normal; }
+
+  /* === Per-level breakdown === */
+  .levels-list { display: flex; flex-direction: column; }
+  .level-row {
+    display: grid;
+    grid-template-columns: 38px 110px 110px 90px 60px 1fr;
+    gap: 8px;
+    padding: 5px 8px;
+    border-bottom: 1px solid #1a1a1a;
+    cursor: pointer;
+    font-size: 11px;
+    align-items: center;
+  }
+  .level-row:last-child { border-bottom: none; }
+  .level-row:hover { background: #1a1a1a; }
+  .level-row.active {
+    background: #1f2a3a;
+    border-left: 2px solid #1E93FF;
+    padding-left: 6px;
+  }
+  .level-row .lvl-name { color: #FFDC00; font-weight: 600; }
+  .level-row .lvl-status {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+  }
+  .level-row .lvl-frames { color: #666; }
+  .level-row .lvl-counts { color: #888; }
+  .level-row .lvl-deaths { color: #F93C31; font-size: 10px; }
+  .level-row .lvl-deaths.zero { color: #333; }
+  .level-row .lvl-actions { display: flex; flex-wrap: wrap; gap: 2px 8px; }
+  .level-row .lvl-actions .act-tally { font-size: 11px; }
+  .levels-hint { font-size: 10px; color: #555; padding: 6px 8px 0; }
+</style>
+</head>
+<body>
+
+<!-- ===== Fixed topbar ===== -->
+<div class="topbar-fixed">
+  <span class="title" id="gameTitle" style="font-size:14px;">—</span>
+  <span class="v2-badge">WORKSPACE</span>
+  <span class="game-status-badge" id="gameStatusBadge" style="display:none;"></span>
+  <span class="branch-badge" id="branchBadge" title="git branch this build was indexed from"></span>
+  <label style="font-size:11px;color:#666;">source</label>
+  <select id="sourceSelect" style="min-width:140px;"></select>
+  <label style="font-size:11px;color:#666;">game</label>
+  <select id="gameSelect"></select>
+  <label style="font-size:11px;color:#666;">status</label>
+  <select id="statusFilter" style="min-width:110px;">
+    <option value="all">all</option>
+    <option value="won">won (full)</option>
+    <option value="any_progress">won or partial</option>
+    <option value="partial">partial only</option>
+    <option value="lost">lost (GAME_OVER)</option>
+    <option value="no_progress">no progress</option>
+  </select>
+  <label style="font-size:11px;color:#666;">recording</label>
+  <select id="recSelect" style="min-width:180px;"></select>
+  <button id="loadFileBtn" title="Load a .jsonl file from your computer (drag-and-drop on canvas also works)">📁 Load</button>
+  <input type="file" id="fileInput" accept=".jsonl,.json" style="display:none;">
+
+  <div class="ws-controls">
+    <label style="font-size:11px;color:#666;">workspace</label>
+    <select id="workspaceSelect" style="min-width:120px;"></select>
+    <button id="saveAsWsBtn" title="Save current panel layout under a new name">💾 Save as…</button>
+    <button id="resetWsBtn" title="Reset current workspace to its default layout">↺ Reset</button>
+    <button id="deleteWsBtn" title="Delete current workspace (built-in ones can't be deleted)">🗑</button>
+  </div>
+</div>
+
+<!-- ===== Workspace area: panels float here ===== -->
+<div class="workspace-area" id="workspaceArea">
+
+  <!-- Game Stage: canvas + frame readout -->
+  <div class="panel-window" id="pw-stage">
+    <div class="panel-header"><span class="panel-title">Game Stage</span></div>
+    <div class="panel-body no-pad" style="display:flex; flex-direction:column;">
+      <div class="canvas-wrap" id="canvasWrap" style="flex:1; padding:8px; min-height:0;">
+        <canvas id="frameCanvas" width="640" height="640"></canvas>
+      </div>
+      <div class="frame-info" id="frameInfo" style="padding:6px 10px; border-top:1px solid #222; flex-shrink:0;">load a recording to begin</div>
+    </div>
+    <div class="resize-handle"></div>
+  </div>
+
+  <!-- Controls: D-pad + space + mouse + A7 -->
+  <div class="panel-window" id="pw-controls">
+    <div class="panel-header"><span class="panel-title">Controls</span></div>
+    <div class="panel-body">
+      <div class="controls-bar" id="controlsBar" style="border:0; padding:0; background:transparent;">
+        <div class="ctrl-group" title="ACTION1–4 — arrow keys">
+          <div class="dpad">
+            <div class="key-cap up"    id="kc-1" data-aid="1">↑<span class="sub">A1</span></div>
+            <div class="key-cap left"  id="kc-3" data-aid="3">←<span class="sub">A3</span></div>
+            <div class="key-cap down"  id="kc-2" data-aid="2">↓<span class="sub">A2</span></div>
+            <div class="key-cap right" id="kc-4" data-aid="4">→<span class="sub">A4</span></div>
+          </div>
+          <div class="ctrl-label">arrows</div>
+        </div>
+        <div class="ctrl-group" title="ACTION5 — spacebar / specials">
+          <div class="key-cap space" id="kc-5" data-aid="5">⎵ SPACE<span class="sub">A5</span></div>
+          <div class="ctrl-label">space</div>
+        </div>
+        <div class="ctrl-group" title="ACTION6 — mouse click at (x,y)">
+          <div class="key-cap mouse" id="kc-6" data-aid="6">🖱 CLICK<span class="xy" id="kc-6-xy">—</span></div>
+          <div class="ctrl-label">mouse (a6)</div>
+        </div>
+        <div class="ctrl-group" title="ACTION7 — game-specific special">
+          <div class="key-cap wide" id="kc-7" data-aid="7">A7<span class="sub">A7</span></div>
+          <div class="ctrl-label">special</div>
+        </div>
+        <span class="avail-text" id="availText">available: <b>—</b></span>
+      </div>
+    </div>
+    <div class="resize-handle"></div>
+  </div>
+
+  <!-- Playback: slider + transport buttons -->
+  <div class="panel-window" id="pw-playback">
+    <div class="panel-header"><span class="panel-title">Playback</span></div>
+    <div class="panel-body" style="display:flex; flex-direction:column; gap:6px;">
+      <div class="playback" style="border:0; padding:0; background:transparent;">
+        <button class="icon" id="jumpFirst" title="Home">⏮</button>
+        <button class="icon" id="prevFrame" title="←">◀</button>
+        <button class="icon" id="playBtn" title="Space">▶</button>
+        <button class="icon" id="nextFrame" title="→">▶</button>
+        <button class="icon" id="jumpLast" title="End">⏭</button>
+        <div class="slider-wrap">
+          <canvas id="markerStripe" class="marker-stripe" height="12"></canvas>
+          <input type="range" id="slider" class="slider" min="0" max="0" value="0">
+        </div>
+        <select id="speedSel" style="width:80px;">
+          <option value="500">2 fps</option>
+          <option value="200" selected>5 fps</option>
+          <option value="100">10 fps</option>
+          <option value="50">20 fps</option>
+        </select>
+      </div>
+      <div class="help" style="padding:0;">Keys: <span class="key">←</span> <span class="key">→</span> step · <span class="key">Shift+←/→</span> ±10 · <span class="key">Home/End</span> · <span class="key">[</span> <span class="key">]</span> filter prev/next · <span class="key">Space</span> play</div>
+    </div>
+    <div class="resize-handle"></div>
+  </div>
+
+  <!-- Reasoning log -->
+  <div class="panel-window" id="pw-reasoning">
+    <div class="panel-header"><span class="panel-title">Reasoning Log</span></div>
+    <div class="panel-body">
+      <div id="reasoningBox" style="font-size:13px; line-height:1.5; color:#ddd;">
+        <span style="color:#555">(no reasoning captured for this frame)</span>
+      </div>
+    </div>
+    <div class="resize-handle"></div>
+  </div>
+
+  <!-- Session summary -->
+  <div class="panel-window" id="pw-summary">
+    <div class="panel-header"><span class="panel-title">Session Summary</span></div>
+    <div class="panel-body">
+      <div class="summary-grid" id="summary"></div>
+    </div>
+    <div class="resize-handle"></div>
+  </div>
+
+  <!-- Levels breakdown -->
+  <div class="panel-window" id="pw-levels">
+    <div class="panel-header"><span class="panel-title">Levels Breakdown</span></div>
+    <div class="panel-body no-pad">
+      <div class="levels-list" id="levelsBox" style="padding-top: 4px;"></div>
+      <div class="levels-hint">click a row to jump to that level's first frame</div>
+    </div>
+    <div class="resize-handle"></div>
+  </div>
+
+  <!-- Timeline -->
+  <div class="panel-window" id="pw-timeline">
+    <div class="panel-header"><span class="panel-title">Replay Events</span></div>
+    <div class="panel-body no-pad" style="display:flex; flex-direction:column;">
+      <div class="timeline" id="timeline" style="flex:1;"></div>
+      <div class="filter-bar">
+        <label style="font-size:11px;color:#666;">filter</label>
+        <select id="markerFilter">
+          <option value="all">all</option>
+          <option value="action">actions</option>
+          <option value="reaction">reactions</option>
+          <option value="decision">decisions</option>
+          <option value="result">results</option>
+          <option value="noop">no-ops</option>
+          <option value="mismatch,stuck">surprises</option>
+        </select>
+      </div>
+    </div>
+    <div class="resize-handle"></div>
+  </div>
+
+</div>
+
+<script>
+// ============================================================
+// ARC-AGI-3 official 16-color palette
+// ============================================================
+const PALETTE = [
+  '#FFFFFF','#CCCCCC','#999999','#666666','#333333','#000000',
+  '#E53AA3','#FF7BCC','#F93C31','#1E93FF','#88D8F1','#FFDC00',
+  '#FF851B','#921231','#4FCC30','#A356D6'
+];
+
+const MARKER_COLORS = {
+  decision:     '#1E93FF',
+  level_change: '#4FCC30',
+  win:          '#FFDC00',
+  loss:         '#F93C31',
+  mismatch:     '#FF851B',
+  stuck:        '#A356D6',
+  reset:        '#999999',
+  result:       '#666666',
+  start:        '#888888',
+  noop:         '#444444',
+};
+
+// Map action_input.id → name and label for the controls strip
+const ACTION_NAMES = {
+  1: 'UP', 2: 'DOWN', 3: 'LEFT', 4: 'RIGHT',
+  5: 'SPACE', 6: 'CLICK', 7: 'A7',
+};
+// Emoji glyph for each action id — used in the timeline + frame-info readouts
+// so the move is recognizable at a glance without parsing the text.
+const ACTION_EMOJI = {
+  1: '⬆', 2: '⬇', 3: '⬅', 4: '➡',
+  5: '␣', 6: '🖱', 7: '✨',
+};
+// Distinct hue per action so the timeline column reads like a colored chip,
+// independent of the marker badge (marker = what happened, action = what was pressed).
+const ACTION_COLORS = {
+  1: '#88D8F1', 2: '#88D8F1', 3: '#88D8F1', 4: '#88D8F1',  // arrows: cyan family
+  5: '#FFDC00',  // space: yellow
+  6: '#FF7BCC',  // click: pink
+  7: '#A356D6',  // a7: purple
+};
+
+// ============================================================
+// State
+// ============================================================
+let manifest = { sources: {} };
+let statusIndex = {};
+let frames = [];
+let markers = [];
+let levelSegs = [];   // [{level, start, end, frames, decisions, noops, actions: {1..7}, outcome}]
+let curFrame = 0;
+let curSource = '';
+let curGame = '';
+let curRec = '';
+let playing = false;
+let playTimer = null;
+
+const STATUS_BADGE = {
+  won:          '[WON]',
+  won_partial:  '[WON*]',
+  partial:      '[PART]',
+  lost:         '[LOST]',
+  no_progress:  '[----]',
+};
+
+function statusMatchesFilter(st, filter) {
+  if (filter === 'all' || !st) return true;
+  if (filter === 'won')          return st.status === 'won';
+  if (filter === 'partial')      return st.status === 'partial' || st.status === 'won_partial';
+  if (filter === 'any_progress') return st.status === 'won' || st.status === 'won_partial' || st.status === 'partial';
+  if (filter === 'lost')         return st.status === 'lost';
+  if (filter === 'no_progress')  return st.status === 'no_progress';
+  return true;
+}
+
+const $ = id => document.getElementById(id);
+
+// ============================================================
+// Marker derivation (pure from recording fields)
+// ============================================================
+function framesEqual(a, b) {
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  for (let y = 0; y < a.length; y++) {
+    const ra = a[y], rb = b[y];
+    if (!ra || !rb || ra.length !== rb.length) return false;
+    for (let x = 0; x < ra.length; x++) {
+      if (ra[x] !== rb[x]) return false;
+    }
+  }
+  return true;
+}
+
+function computeMarkers(fs) {
+  const out = [];
+  let prevFrame = null, prevLevels = 0, prevState = null;
+  for (let i = 0; i < fs.length; i++) {
+    const d = fs[i].data || {};
+    const lvl = d.levels_completed || 0;
+    const state = d.state;
+    const frame = d.frame ? d.frame[0] : null;
+    let m = 'decision';
+    if (i === 0) m = 'start';
+    else if (lvl > prevLevels) m = 'level_change';
+    else if (state === 'WIN') m = 'win';
+    else if (state === 'GAME_OVER') m = 'loss';
+    else if (d.full_reset === true) m = 'reset';
+    else if (state === 'NOT_PLAYED' && prevState && prevState !== 'NOT_PLAYED') m = 'reset';
+    else if (framesEqual(frame, prevFrame)) m = 'noop';
+    else m = 'decision';
+    out.push(m);
+    prevFrame = frame;
+    prevLevels = lvl;
+    prevState = state;
+  }
+  return out;
+}
+
+// ============================================================
+// Manifest + recording load
+// ============================================================
+async function loadManifest() {
+  try {
+    const [m, s] = await Promise.all([
+      fetch('manifest.json').then(r => r.json()),
+      fetch('status_index.json').then(r => r.json()).catch(() => ({})),
+    ]);
+    manifest = m;
+    statusIndex = s || {};
+  } catch (e) {
+    showError('Could not load manifest.json. Make sure server is running from agi-3/ root and `python build_index.py` has been run.');
+    return;
+  }
+  const badge = $('branchBadge');
+  if (badge) {
+    const br = manifest.branch || '?';
+    badge.textContent = br;
+    badge.classList.toggle('main', br === 'main' || br === 'master');
+  }
+  const sources = Object.keys(manifest.sources || {});
+  if (!sources.length) {
+    showError('manifest.json has no sources. Run `python build_index.py` to generate one.');
+    return;
+  }
+  const srcSel = $('sourceSelect');
+  srcSel.innerHTML = sources.map(id => {
+    const src = manifest.sources[id];
+    const total = Object.values(src.games || {}).reduce((a, b) => a + b.length, 0);
+    return `<option value="${id}">${src.label || id} (${total})</option>`;
+  }).join('');
+  loadSource(sources[0]);
+}
+
+function loadSource(sid) {
+  curSource = sid;
+  $('sourceSelect').value = sid;
+  const src = manifest.sources[sid];
+  if (!src) { showError(`source not found: ${sid}`); return; }
+  const games = Object.keys(src.games).sort();
+  const sel = $('gameSelect');
+  sel.innerHTML = games.map(g => `<option value="${g}">${g} (${src.games[g].length})</option>`).join('');
+  if (games.length) loadGame(games[0]);
+}
+
+function loadGame(g) {
+  curGame = g;
+  $('gameTitle').textContent = `${g} · ${manifest.sources[curSource]?.label || curSource}`;
+  $('gameSelect').value = g;
+  populateRecordings();
+}
+
+function populateRecordings() {
+  const src = manifest.sources[curSource];
+  if (!src) return;
+  const filter = $('statusFilter').value;
+  const allRecs = src.games[curGame] || [];
+  const statuses = (statusIndex[curSource] && statusIndex[curSource][curGame]) || {};
+  const recs = allRecs.filter(f => statusMatchesFilter(statuses[f], filter));
+  const sel = $('recSelect');
+  if (!recs.length) {
+    sel.innerHTML = '<option value="">— no recordings match filter —</option>';
+    $('frameInfo').textContent = 'no recordings match the current status filter';
+    return;
+  }
+  sel.innerHTML = recs.map(f => {
+    const st = statuses[f];
+    const badge = st ? (STATUS_BADGE[st.status] || '[?]') : '[?]';
+    const lvls = st ? `${st.levels_completed}/${st.win_levels}` : '?';
+    const stripped = f.replace(new RegExp(`^${curGame}\\.`), '').replace(/^myagent\./, '');
+    return `<option value="${f}">${badge} ${lvls} · ${stripped.slice(0, 22)}…</option>`;
+  }).join('');
+  loadRecording(recs[0]);
+}
+
+async function loadRecording(fname) {
+  stopPlay();
+  if (!fname) return;
+  curRec = fname;
+  $('recSelect').value = fname;
+  const src = manifest.sources[curSource];
+  if (!src) { showError('no source selected'); return; }
+  const url = src.layout === 'game_dir'
+    ? `${src.base_url}/${curGame}/${fname}`
+    : `${src.base_url}/${fname}`;
+  $('frameInfo').textContent = `loading ${fname.slice(0, 12)}…`;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
+    const text = await r.text();
+    frames = text.trim().split('\n').map(l => JSON.parse(l));
+  } catch (e) {
+    showError(`Failed to load recording: ${e.message}\nURL: ${url}`);
+    return;
+  }
+  markers = computeMarkers(frames);
+  levelSegs = computeLevelSegments(frames, markers);
+  curFrame = 0;
+  $('slider').max = frames.length - 1;
+  $('slider').value = 0;
+  buildTimeline();
+  drawMarkerStripe();
+  render();
+}
+
+function showError(msg) {
+  $('frameInfo').innerHTML = `<span class="error">${msg.replace(/\n/g, '<br>')}</span>`;
+  console.error(msg);
+}
+
+// ============================================================
+// Level segmentation: split a recording into per-level chunks
+// ============================================================
+// Outcomes:
+//   won         — segment ended in a levels_completed bump OR state=WIN
+//   lost        — trailing segment whose final frame is GAME_OVER (player didn't recover)
+//   reset       — player abandoned the level (full_reset or NOT_PLAYED transition)
+//   in_progress — trailing segment that contains curFrame (computed at render)
+//   uncompleted — trailing segment whose final frame is NOT_FINISHED (recording cut short)
+//
+// Note: mid-level GAME_OVER → NOT_FINISHED bounces are NOT segment boundaries — they're
+// just deaths the player retried from. Tallied as seg.deaths.
+function computeLevelSegments(fs, mks) {
+  if (!fs.length) return [];
+  const segs = [];
+  let segStart = 0;
+  let segLevel = ((fs[0].data && fs[0].data.levels_completed) || 0) + 1;
+
+  for (let i = 1; i < fs.length; i++) {
+    const d = fs[i].data || {};
+    const prevD = fs[i-1].data || {};
+    const lc = d.levels_completed || 0;
+    const prevLc = prevD.levels_completed || 0;
+    const st = d.state;
+    const bumped = lc > prevLc;
+    const isWin = st === 'WIN';
+    const isReset = d.full_reset === true ||
+                    (st === 'NOT_PLAYED' && prevD.state && prevD.state !== 'NOT_PLAYED');
+
+    if (isWin) {
+      // Final level beaten — close current segment at this frame and stop.
+      // Set segStart past end so the trailing-segment check below skips any
+      // post-WIN cleanup frames (state=None, etc.) instead of emitting a
+      // phantom "L<N+1> uncompleted" row.
+      segs.push({ level: segLevel, start: segStart, end: i, outcome: 'won' });
+      segStart = fs.length;
+      break;
+    } else if (bumped) {
+      // Intermediate level victory — previous level ends at i-1, new level starts at i.
+      segs.push({ level: segLevel, start: segStart, end: i - 1, outcome: 'won' });
+      segLevel = lc + 1;
+      segStart = i;
+    } else if (isReset) {
+      segs.push({ level: segLevel, start: segStart, end: i - 1, outcome: 'reset' });
+      segLevel = lc + 1;
+      segStart = i;
+    }
+  }
+
+  // Trailing segment: outcome based on the final frame's state
+  if (segStart < fs.length) {
+    const lastSt = fs[fs.length - 1].data && fs[fs.length - 1].data.state;
+    const outcome = lastSt === 'GAME_OVER' ? 'lost' : 'uncompleted';
+    segs.push({
+      level: segLevel,
+      start: segStart,
+      end: fs.length - 1,
+      outcome,
+    });
+  }
+
+  // Tally counts + deaths (GAME_OVER transitions within the segment)
+  for (const seg of segs) {
+    seg.frames = seg.end - seg.start + 1;
+    seg.decisions = 0;
+    seg.noops = 0;
+    seg.deaths = 0;
+    seg.actions = { 1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0 };
+    let prevSt = null;
+    for (let i = seg.start; i <= seg.end; i++) {
+      if (mks[i] === 'decision') seg.decisions++;
+      else if (mks[i] === 'noop') seg.noops++;
+      const a = frameAction(fs[i]);
+      if (a.id && a.id >= 1 && a.id <= 7) seg.actions[a.id]++;
+      const st = fs[i].data && fs[i].data.state;
+      if (st === 'GAME_OVER' && prevSt !== 'GAME_OVER') seg.deaths++;
+      prevSt = st;
+    }
+  }
+  return segs;
+}
+
+const OUTCOME_COLOR = {
+  won:          '#4FCC30',
+  lost:         '#F93C31',
+  reset:        '#A356D6',
+  uncompleted:  '#FF851B',
+  in_progress:  '#1E93FF',
+};
+
+// "Destiny" label for a frame's per-level status, derived from its segment outcome.
+// This replaces the raw env state ('NOT_FINISHED') which is misleading when you can
+// see from the rest of the playback that the level was eventually beaten.
+const FRAME_DESTINY_LABEL = {
+  won:          'level_completed',
+  lost:         'level_failed',
+  reset:        'level_reset',
+  uncompleted:  'level_unfinished',
+};
+
+function segmentAt(frameIdx) {
+  for (const seg of levelSegs) {
+    if (frameIdx >= seg.start && frameIdx <= seg.end) return seg;
+  }
+  // Post-WIN cleanup frames (state=null after the winning frame) live past the
+  // last segment's end. Attribute them to the last segment so the destiny label
+  // stays consistent instead of dropping to "L?/? · —".
+  if (levelSegs.length && frameIdx > levelSegs[levelSegs.length - 1].end) {
+    return levelSegs[levelSegs.length - 1];
+  }
+  return null;
+}
+
+// Overall recording outcome — what does the whole replay show?
+// Returns null if no recording loaded, else { label, color }.
+function recordingOutcome() {
+  if (!levelSegs.length || !frames.length) return null;
+  const winLvls = (frames[0].data && frames[0].data.win_levels) ||
+                  (frames[frames.length - 1].data && frames[frames.length - 1].data.win_levels) || 0;
+  const wonCount = levelSegs.filter(s => s.outcome === 'won').length;
+  const last = levelSegs[levelSegs.length - 1];
+  // All levels beaten = whole game completed
+  if (winLvls && wonCount >= winLvls) return { label: 'GAME COMPLETED', color: '#4FCC30' };
+  // Trailing segment lost = recording ended in GAME_OVER on this level
+  if (last.outcome === 'lost') return { label: `LOST ${wonCount}/${winLvls || '?'}`, color: '#F93C31' };
+  // Some progress but didn't finish
+  if (wonCount > 0) return { label: `PARTIAL ${wonCount}/${winLvls || '?'}`, color: '#FFDC00' };
+  // No progress at all
+  return { label: 'NO PROGRESS', color: '#888' };
+}
+const OUTCOME_LABEL = {
+  won:          '✓ won',
+  lost:         '✗ lost',
+  reset:        '⟲ reset',
+  uncompleted:  '⏸ uncompleted',
+  in_progress:  '⏵ in progress',
+};
+
+function renderLevels() {
+  const box = $('levelsBox');
+  if (!box) return;
+  if (!levelSegs.length) {
+    box.innerHTML = '<div style="padding:10px; color:#555;">no level data</div>';
+    return;
+  }
+  const rows = levelSegs.map((seg, idx) => {
+    const isCur = curFrame >= seg.start && curFrame <= seg.end;
+    // The trailing (uncompleted) segment containing the playhead is really "in progress"
+    const effOutcome = (isCur && seg.outcome === 'uncompleted') ? 'in_progress' : seg.outcome;
+    const statusColor = OUTCOME_COLOR[effOutcome] || '#888';
+    const statusLabel = OUTCOME_LABEL[effOutcome] || effOutcome;
+    const actionsHtml = [1,2,3,4,5,6,7].map(aid => {
+      if (!seg.actions[aid]) return '';
+      const col = ACTION_COLORS[aid] || '#888';
+      return `<span class="act-tally" style="color:${col}">${ACTION_EMOJI[aid]}${seg.actions[aid]}</span>`;
+    }).join('');
+    const deathsHtml = seg.deaths > 0
+      ? `<span class="lvl-deaths">💀 ${seg.deaths}</span>`
+      : `<span class="lvl-deaths zero">💀 0</span>`;
+    return (
+      `<div class="level-row ${isCur ? 'active' : ''}" data-start="${seg.start}">` +
+        `<span class="lvl-name">L${seg.level}</span>` +
+        `<span class="lvl-status" style="color:${statusColor}">${statusLabel}</span>` +
+        `<span class="lvl-frames">f${seg.start}–${seg.end} (${seg.frames})</span>` +
+        `<span class="lvl-counts">${seg.decisions}d · ${seg.noops}n</span>` +
+        deathsHtml +
+        `<span class="lvl-actions">${actionsHtml || '<span style="color:#444">no actions</span>'}</span>` +
+      `</div>`
+    );
+  }).join('');
+  box.innerHTML = rows;
+  box.querySelectorAll('.level-row').forEach(el => {
+    el.onclick = () => {
+      stopPlay();
+      curFrame = parseInt(el.dataset.start, 10);
+      render();
+    };
+  });
+}
+
+// ============================================================
+// Action parsing: pull canonical {id, x, y} from a frame
+// ============================================================
+function frameAction(f) {
+  const ai = f && f.data && f.data.action_input;
+  if (!ai) return { id: null };
+  const id = ai.id;
+  if (id === 6) {
+    const d = ai.data || {};
+    return { id: 6, x: (typeof d.x === 'number' ? d.x : null), y: (typeof d.y === 'number' ? d.y : null) };
+  }
+  return { id: (typeof id === 'number' ? id : null) };
+}
+
+// Returns the integer action ids available for this game on this frame, e.g. [1,3,4]
+function frameAvailable(f) {
+  const av = f && f.data && f.data.available_actions;
+  if (!Array.isArray(av)) return null;
+  const out = [];
+  for (const a of av) {
+    if (typeof a === 'number') { out.push(a); continue; }
+    const m = /ACTION(\d)/i.exec(String(a));
+    if (m) out.push(parseInt(m[1], 10));
+  }
+  return out;
+}
+
+// ============================================================
+// Render: canvas + frame info + controls
+// ============================================================
+function render() {
+  if (!frames.length) return;
+  const f = frames[curFrame];
+  const d = f.data || {};
+  const grid = d.frame && d.frame[0];
+  const canvas = $('frameCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  if (!grid) {
+    ctx.fillStyle = '#220000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    renderControls(f);
+    return;
+  }
+  const size = grid.length;
+  const cell = canvas.width / size;
+
+  for (let y = 0; y < size; y++) {
+    const row = grid[y];
+    for (let x = 0; x < size; x++) {
+      ctx.fillStyle = PALETTE[row[x]] || '#ff00ff';
+      ctx.fillRect(x * cell, y * cell, cell, cell);
+    }
+  }
+  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i <= size; i++) {
+    const p = Math.round(i * cell) + 0.5;
+    ctx.moveTo(p, 0); ctx.lineTo(p, canvas.height);
+    ctx.moveTo(0, p); ctx.lineTo(canvas.width, p);
+  }
+  ctx.stroke();
+
+  // Click cursor overlay: highlight the clicked cell when this frame's action was a click
+  const act = frameAction(f);
+  if (act.id === 6 && act.x !== null && act.y !== null) {
+    drawCursor(ctx, act.x, act.y, cell, size);
+  }
+
+  $('slider').value = curFrame;
+  const mk = markers[curFrame] || '?';
+  const aid = act.id;
+  const aEmoji = aid && ACTION_EMOJI[aid] ? `<span style="color:${ACTION_COLORS[aid] || '#aaa'}">${ACTION_EMOJI[aid]}</span> ` : '';
+  const actStr = aid === 0
+    ? '⟲ RESET'
+    : (aid ? aEmoji + (ACTION_NAMES[aid] || `A${aid}`) + (aid === 6 ? ` (${act.x},${act.y})` : '') : '—');
+
+  // Derived per-frame status: based on which level-segment this frame belongs to,
+  // rather than the raw env state ('NOT_FINISHED' which lies once you know how the
+  // level resolves). The current level number also comes from the segment so it
+  // doesn't read as "L0" before any level is completed.
+  const seg = segmentAt(curFrame);
+  const destinyLabel = seg ? (FRAME_DESTINY_LABEL[seg.outcome] || seg.outcome) : '—';
+  const destinyColor = seg ? (OUTCOME_COLOR[seg.outcome] || '#aaa') : '#888';
+  const winLvls = d.win_levels || 0;
+  const curLvl = seg ? seg.level : ((d.levels_completed || 0) + 1);
+
+  $('frameInfo').innerHTML =
+    `<span class="marker-badge" style="background:${MARKER_COLORS[mk] || '#888'}">${mk}</span> ` +
+    `frame <b style="color:#fff">${curFrame}/${frames.length - 1}</b> · ` +
+    `${actStr} · ` +
+    `L<b style="color:#FFDC00">${curLvl}</b>/${winLvls || '?'} · ` +
+    `<span style="color:${destinyColor}; font-weight:600;">${destinyLabel}</span>` +
+    (d.state ? ` <span style="color:#444; font-size:11px;">(raw: ${d.state})</span>` : '');
+
+  // Topbar recording-outcome badge
+  const ro = recordingOutcome();
+  const gsb = $('gameStatusBadge');
+  if (gsb) {
+    if (ro) {
+      gsb.style.display = '';
+      gsb.style.color = ro.color;
+      gsb.textContent = ro.label;
+    } else {
+      gsb.style.display = 'none';
+    }
+  }
+
+  const sum = $('summary');
+  const wins = markers.filter(m => m === 'win').length;
+  const lvlChanges = markers.filter(m => m === 'level_change').length;
+  const decisions = markers.filter(m => m === 'decision').length;
+  const noops = markers.filter(m => m === 'noop').length;
+  const mismatches = markers.filter(m => m === 'mismatch').length;
+  sum.innerHTML = [
+    ['game_id',          d.game_id || '—'],
+    ['recording',        (curRec || '').slice(0, 16) + (curRec && curRec.length > 16 ? '…' : '')],
+    ['frames',           frames.length],
+    ['levels reached',   `${d.levels_completed || 0} / ${winLvls || '?'}`],
+    ['state (current)',  d.state || '—'],
+    ['current action',   actStr],
+    ['available actions',(d.available_actions || []).join(', ')],
+    ['marker',           `<span class="marker-badge" style="background:${MARKER_COLORS[mk] || '#888'}">${mk}</span>`],
+    ['totals',           `${decisions} decisions · ${noops} no-ops · ${lvlChanges} level-changes · ${wins} wins · ${mismatches} mismatches`],
+  ].map(([k, v]) => `<b>${k}</b><span>${v}</span>`).join('');
+
+  const rb = $('reasoningBox');
+  if (rb) {
+    const r = d.reasoning;
+    if (r && r.rationale) {
+      const decider = r.decided_by ? `<span style="color:#666; font-size:11px;">[${r.decided_by}${r.play_name ? ' · ' + r.play_name : ''}]</span> ` : '';
+      const ctxLines = [];
+      for (let i = Math.max(0, curFrame - 2); i < curFrame; i++) {
+        const pr = frames[i].data && frames[i].data.reasoning;
+        if (pr && pr.rationale) ctxLines.push(`<div style="color:#444; font-size:11px;">${escapeHtml(pr.rationale)}</div>`);
+      }
+      rb.innerHTML = ctxLines.join('') + `<div style="color:#fff; font-size:14px; margin-top:4px;">${decider}${escapeHtml(r.rationale)}</div>`;
+    } else {
+      rb.innerHTML = '<span style="color:#555">(no reasoning captured for this frame)</span>';
+    }
+  }
+
+  // Controls strip
+  renderControls(f);
+
+  // Per-level breakdown (highlights the level containing curFrame)
+  renderLevels();
+
+  // Timeline active highlight
+  document.querySelectorAll('.timeline-item').forEach(el => el.classList.remove('active'));
+  const active = $('tl-' + curFrame);
+  if (active) {
+    active.classList.add('active');
+    const tl = $('timeline');
+    const r = active.getBoundingClientRect();
+    const tr = tl.getBoundingClientRect();
+    if (r.top < tr.top || r.bottom > tr.bottom) active.scrollIntoView({ block: 'center' });
+  }
+}
+
+// Draws a cursor + highlight ring on the clicked cell.
+// (x, y) are grid coords in [0, size).
+function drawCursor(ctx, x, y, cell, size) {
+  if (x < 0 || y < 0 || x >= size || y >= size) return;
+  const cx = x * cell, cy = y * cell;
+  // Highlight square — bright yellow stroke that survives any background color
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#000';
+  ctx.strokeRect(cx + 1.5, cy + 1.5, cell - 3, cell - 3);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#FFDC00';
+  ctx.strokeRect(cx + 1.5, cy + 1.5, cell - 3, cell - 3);
+  // Crosshair extending from the cell — short lines so it doesn't dominate
+  ctx.beginPath();
+  ctx.strokeStyle = 'rgba(255,220,0,0.55)';
+  ctx.lineWidth = 1;
+  const midX = cx + cell / 2, midY = cy + cell / 2;
+  ctx.moveTo(midX, Math.max(0, cy - cell));    ctx.lineTo(midX, cy + 1);
+  ctx.moveTo(midX, cy + cell - 1);              ctx.lineTo(midX, Math.min(size * cell, cy + 2 * cell));
+  ctx.moveTo(Math.max(0, cx - cell), midY);     ctx.lineTo(cx + 1, midY);
+  ctx.moveTo(cx + cell - 1, midY);              ctx.lineTo(Math.min(size * cell, cx + 2 * cell), midY);
+  ctx.stroke();
+  // Tiny pointer arrow at top-left of the cell
+  ctx.fillStyle = '#FFDC00';
+  ctx.beginPath();
+  ctx.moveTo(cx - 1, cy - 1);
+  ctx.lineTo(cx + cell * 0.45, cy + cell * 0.15);
+  ctx.lineTo(cx + cell * 0.15, cy + cell * 0.45);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+function renderControls(f) {
+  const act = frameAction(f);
+  const avail = frameAvailable(f);  // null = unknown, else array of int ids in [1,7]
+  const availSet = avail ? new Set(avail) : null;
+
+  for (let aid = 1; aid <= 7; aid++) {
+    const el = $('kc-' + aid);
+    if (!el) continue;
+    el.classList.remove('active', 'click-active', 'unavailable');
+    if (availSet && !availSet.has(aid)) el.classList.add('unavailable');
+    if (act.id === aid) {
+      el.classList.add('active');
+      if (aid === 6) el.classList.add('click-active');
+    }
+  }
+
+  // Mouse cap — show current click coords when this frame's action is a click,
+  // otherwise show the last click coords from the recording (faded) for context.
+  const xyEl = $('kc-6-xy');
+  if (xyEl) {
+    if (act.id === 6 && act.x !== null && act.y !== null) {
+      xyEl.textContent = `(${act.x}, ${act.y})`;
+      xyEl.style.color = '';
+    } else {
+      // Find most recent click before curFrame
+      let lastClick = null;
+      for (let i = curFrame - 1; i >= 0; i--) {
+        const a = frameAction(frames[i]);
+        if (a.id === 6 && a.x !== null && a.y !== null) { lastClick = a; break; }
+      }
+      if (lastClick) {
+        xyEl.textContent = `(${lastClick.x}, ${lastClick.y})`;
+        xyEl.style.color = '#444';
+      } else {
+        xyEl.textContent = '—';
+        xyEl.style.color = '';
+      }
+    }
+  }
+
+  // Available-actions hint
+  const at = $('availText');
+  if (at) {
+    if (avail && avail.length) {
+      at.innerHTML = `available: <b>${avail.map(i => ACTION_NAMES[i] || `A${i}`).join(' · ')}</b> <span style="color:#444">(${avail.length}/7)</span>`;
+    } else {
+      at.innerHTML = 'available: <b>—</b>';
+    }
+  }
+}
+
+// ============================================================
+// Timeline (right panel)
+// ============================================================
+const FILTER_PREDICATES = {
+  all:        (_m, _i) => true,
+  action:     (m, _i) => m === 'decision' || m === 'noop' || m === 'reset',
+  reaction:   (m, i) => i > 0 && (markers[i-1] === 'decision') && (m === 'level_change' || m === 'win' || m === 'loss'),
+  decision:   (m, _i) => m === 'decision',
+  result:     (m, _i) => m === 'level_change' || m === 'win' || m === 'loss',
+  noop:       (m, _i) => m === 'noop',
+};
+
+function frameMatchesFilter(i) {
+  const f = $('markerFilter').value;
+  if (f === 'all') return true;
+  if (f.includes(',')) {
+    const wanted = new Set(f.split(','));
+    return wanted.has(markers[i]);
+  }
+  const pred = FILTER_PREDICATES[f];
+  return pred ? pred(markers[i], i) : false;
+}
+
+function drawMarkerStripe() {
+  const canvas = $('markerStripe');
+  if (!canvas || !markers.length) return;
+  const cssWidth = canvas.clientWidth || canvas.parentElement.clientWidth || 600;
+  canvas.width = cssWidth;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const n = markers.length;
+  if (n === 0) return;
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  for (let i = 0; i < n; i++) {
+    const m = markers[i];
+    const color = MARKER_COLORS[m] || '#444';
+    ctx.fillStyle = color;
+    const x = Math.floor(i * canvas.width / n);
+    const nx = Math.floor((i + 1) * canvas.width / n);
+    ctx.fillRect(x, 0, Math.max(1, nx - x), canvas.height);
+  }
+  const MILESTONES = new Set(['level_change', 'win', 'loss', 'reset', 'mismatch', 'stuck']);
+  for (let i = 0; i < n; i++) {
+    if (!MILESTONES.has(markers[i])) continue;
+    const color = MARKER_COLORS[markers[i]] || '#fff';
+    const x = Math.floor(i * canvas.width / n);
+    ctx.fillStyle = color;
+    ctx.fillRect(x, 0, Math.max(2, Math.ceil(canvas.width / n)), canvas.height);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x, 0, Math.max(2, Math.ceil(canvas.width / n)), 1);
+    ctx.fillRect(x, canvas.height - 1, Math.max(2, Math.ceil(canvas.width / n)), 1);
+  }
+}
+
+function buildTimeline() {
+  const tl = $('timeline');
+  const items = [];
+  for (let i = 0; i < frames.length; i++) {
+    if (!frameMatchesFilter(i)) continue;
+    const m = markers[i];
+    const act = frameAction(frames[i]);
+    let actHTML, actClass = 'action';
+    if (act.id === 6 && act.x !== null) {
+      actHTML = `<span class="emoji" style="color:${ACTION_COLORS[6]}">${ACTION_EMOJI[6]}</span><span style="color:${ACTION_COLORS[6]}">${act.x},${act.y}</span>`;
+    } else if (act.id && act.id > 0) {
+      const col = ACTION_COLORS[act.id] || '#aaa';
+      actHTML = `<span class="emoji" style="color:${col}">${ACTION_EMOJI[act.id] || '?'}</span><span style="color:${col}">${ACTION_NAMES[act.id] || `A${act.id}`}</span>`;
+    } else {
+      actHTML = `<span class="emoji">·</span>—`;
+      actClass += ' act-none';
+    }
+    const color = MARKER_COLORS[m] || '#888';
+    const d = frames[i].data || {};
+    const rsn = d.reasoning && d.reasoning.rationale ? ` <span style="color:#666; font-size:10px;">${escapeHtml(d.reasoning.rationale.slice(0, 40))}</span>` : '';
+    items.push(
+      `<div class="timeline-item" id="tl-${i}" data-frame="${i}">` +
+        `<span class="idx">${i}</span>` +
+        `<span class="${actClass}">${actHTML}</span>` +
+        `<span class="marker-badge" style="background:${color}">${m}</span>` +
+        rsn +
+      `</div>`
+    );
+  }
+  tl.innerHTML = items.join('') || '<div style="padding:20px;color:#555;text-align:center;font-size:11px;">no frames match this filter</div>';
+  tl.querySelectorAll('.timeline-item').forEach(el => {
+    el.onclick = () => {
+      stopPlay();
+      curFrame = parseInt(el.dataset.frame, 10);
+      render();
+    };
+  });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ============================================================
+// Navigation
+// ============================================================
+function step(n) {
+  curFrame = Math.max(0, Math.min(frames.length - 1, curFrame + n));
+  render();
+}
+
+function jumpFiltered(dir) {
+  const filter = $('markerFilter').value;
+  if (filter === 'all') return step(dir);
+  const wanted = new Set(filter.split(','));
+  const indices = [];
+  for (let i = 0; i < markers.length; i++) if (wanted.has(markers[i])) indices.push(i);
+  if (!indices.length) return;
+  const target = dir > 0
+    ? indices.find(i => i > curFrame)
+    : [...indices].reverse().find(i => i < curFrame);
+  if (target !== undefined) { curFrame = target; render(); }
+}
+
+// ============================================================
+// Playback
+// ============================================================
+function stopPlay() {
+  if (playTimer) clearInterval(playTimer);
+  playTimer = null;
+  playing = false;
+  $('playBtn').textContent = '▶';
+}
+
+function startPlay() {
+  if (!frames.length) return;
+  stopPlay();
+  playing = true;
+  $('playBtn').textContent = '⏸';
+  const interval = parseInt($('speedSel').value, 10);
+  playTimer = setInterval(() => {
+    if (curFrame >= frames.length - 1) { stopPlay(); return; }
+    curFrame++;
+    render();
+  }, interval);
+}
+
+function togglePlay() { playing ? stopPlay() : startPlay(); }
+
+// ============================================================
+// Event wiring
+// ============================================================
+function wire(id, prop, fn) { const el = $(id); if (el) el[prop] = fn; }
+
+wire('sourceSelect', 'onchange', e => loadSource(e.target.value));
+wire('gameSelect',   'onchange', e => loadGame(e.target.value));
+wire('statusFilter', 'onchange', () => populateRecordings());
+wire('recSelect',    'onchange', e => loadRecording(e.target.value));
+wire('prevFrame',    'onclick',  () => { stopPlay(); step(-1); });
+wire('nextFrame',    'onclick',  () => { stopPlay(); step(1); });
+wire('jumpFirst',    'onclick',  () => { stopPlay(); curFrame = 0; render(); });
+wire('jumpLast',     'onclick',  () => { stopPlay(); curFrame = frames.length - 1; render(); });
+wire('playBtn',      'onclick',  togglePlay);
+wire('speedSel',     'onchange', () => { if (playing) startPlay(); });
+wire('slider',       'oninput',  e => { stopPlay(); curFrame = +e.target.value; render(); });
+wire('markerFilter', 'onchange', () => buildTimeline());
+
+function loadFileFromBlob(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const text = e.target.result;
+      frames = text.trim().split('\n').map(l => JSON.parse(l));
+      markers = computeMarkers(frames);
+      levelSegs = computeLevelSegments(frames, markers);
+      curFrame = 0;
+      curGame = '(file)';
+      curRec = file.name;
+      $('gameTitle').textContent = file.name;
+      $('slider').max = frames.length - 1;
+      $('slider').value = 0;
+      buildTimeline();
+      drawMarkerStripe();
+      render();
+    } catch (err) {
+      showError(`Could not parse ${file.name}: ${err.message}`);
+    }
+  };
+  reader.onerror = () => showError(`Could not read ${file.name}`);
+  reader.readAsText(file);
+}
+wire('loadFileBtn', 'onclick', () => $('fileInput').click());
+wire('fileInput',   'onchange', e => { if (e.target.files[0]) loadFileFromBlob(e.target.files[0]); });
+
+const dropTarget = $('canvasWrap');
+if (dropTarget) {
+  ['dragenter', 'dragover'].forEach(ev => {
+    dropTarget.addEventListener(ev, e => {
+      e.preventDefault(); e.stopPropagation();
+      dropTarget.style.boxShadow = '0 0 0 2px #1E93FF';
+    });
+  });
+  ['dragleave', 'drop'].forEach(ev => {
+    dropTarget.addEventListener(ev, e => {
+      e.preventDefault(); e.stopPropagation();
+      dropTarget.style.boxShadow = '';
+    });
+  });
+  dropTarget.addEventListener('drop', e => {
+    if (e.dataTransfer.files[0]) loadFileFromBlob(e.dataTransfer.files[0]);
+  });
+}
+
+window.addEventListener('resize', () => { drawMarkerStripe(); });
+
+document.addEventListener('keydown', e => {
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+  if (e.key === 'ArrowLeft')      { stopPlay(); step(e.shiftKey ? -10 : -1); }
+  else if (e.key === 'ArrowRight'){ stopPlay(); step(e.shiftKey ? 10 : 1); }
+  else if (e.key === 'Home')      { stopPlay(); curFrame = 0; render(); }
+  else if (e.key === 'End')       { stopPlay(); curFrame = frames.length - 1; render(); }
+  else if (e.key === ' ')         { e.preventDefault(); togglePlay(); }
+  else if (e.key === '[')         { stopPlay(); jumpFiltered(-1); }
+  else if (e.key === ']')         { stopPlay(); jumpFiltered(1); }
+});
+
+// ============================================================
+// Boot
+// ============================================================
+// ============================================================
+// Workspace: draggable + resizable panels, saved to localStorage
+// ============================================================
+const WS_STORAGE_KEY = 'agi3_workspaces_v1';
+const WS_CURRENT_KEY = 'agi3_workspace_current_v1';
+const DEFAULT_WS_NAME = 'Compact';
+
+// Default panel positions. Tuned for a 1920x1080 viewport (minus 50px topbar).
+// On smaller screens panels will overflow — the user can drag/resize to fix.
+const BUILTIN_LAYOUTS = {
+  Compact: {
+    'pw-stage':     { x: 10,   y: 10,  w: 720, h: 760 },
+    'pw-controls':  { x: 10,   y: 778, w: 720, h: 110 },
+    'pw-playback':  { x: 10,   y: 896, w: 720, h: 100 },
+    'pw-summary':   { x: 738,  y: 10,  w: 380, h: 270 },
+    'pw-levels':    { x: 738,  y: 288, w: 580, h: 380 },
+    'pw-reasoning': { x: 738,  y: 676, w: 580, h: 320 },
+    'pw-timeline':  { x: 1326, y: 10,  w: 580, h: 986 },
+  },
+  Wide: {
+    // Big game stage, single right column with everything stacked
+    'pw-stage':     { x: 10,   y: 10,  w: 980, h: 880 },
+    'pw-controls':  { x: 10,   y: 898, w: 600, h: 98  },
+    'pw-playback':  { x: 618,  y: 898, w: 372, h: 98  },
+    'pw-summary':   { x: 998,  y: 10,  w: 460, h: 260 },
+    'pw-levels':    { x: 998,  y: 278, w: 460, h: 340 },
+    'pw-reasoning': { x: 998,  y: 626, w: 460, h: 370 },
+    'pw-timeline':  { x: 1466, y: 10,  w: 440, h: 986 },
+  },
+};
+const BUILTIN_NAMES = new Set(Object.keys(BUILTIN_LAYOUTS));
+
+let activeDrag = null;     // { el, dx, dy } — mouse offset within panel during drag
+let activeResize = null;   // { el, mx0, my0, w0, h0 } — start positions
+let zCounter = 100;
+
+function bringToFront(el) {
+  zCounter += 1;
+  el.style.zIndex = zCounter;
+  document.querySelectorAll('.panel-window.focused').forEach(p => p.classList.remove('focused'));
+  el.classList.add('focused');
+}
+
+function makePanelInteractive(el) {
+  const header = el.querySelector('.panel-header');
+  const handle = el.querySelector('.resize-handle');
+  if (!header || !handle) return;
+
+  header.addEventListener('mousedown', e => {
+    // Ignore clicks on form controls inside header (none today, but defensive)
+    if (e.target.closest('button, input, select, textarea')) return;
+    bringToFront(el);
+    const rect = el.getBoundingClientRect();
+    activeDrag = { el, dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+    document.body.classList.add('dragging');
+    e.preventDefault();
+  });
+
+  handle.addEventListener('mousedown', e => {
+    bringToFront(el);
+    activeResize = { el, mx0: e.clientX, my0: e.clientY, w0: el.offsetWidth, h0: el.offsetHeight };
+    document.body.classList.add('resizing');
+    e.preventDefault();
+    e.stopPropagation();
+  });
+
+  // Click anywhere on the panel body brings it to front (helps the focused outline track focus)
+  el.addEventListener('mousedown', () => bringToFront(el), { capture: true });
+}
+
+document.addEventListener('mousemove', e => {
+  if (activeDrag) {
+    const { el, dx, dy } = activeDrag;
+    const topbarH = 50;
+    el.style.left = Math.max(0, e.clientX - dx) + 'px';
+    el.style.top  = Math.max(0, e.clientY - dy - topbarH) + 'px';
+  } else if (activeResize) {
+    const { el, mx0, my0, w0, h0 } = activeResize;
+    const newW = Math.max(180, w0 + (e.clientX - mx0));
+    const newH = Math.max(100, h0 + (e.clientY - my0));
+    el.style.width  = newW + 'px';
+    el.style.height = newH + 'px';
+    onPanelResize(el);
+  }
+});
+
+document.addEventListener('mouseup', () => {
+  if (activeDrag || activeResize) {
+    activeDrag = null;
+    activeResize = null;
+    document.body.classList.remove('dragging', 'resizing');
+    autoSaveCurrentLayout();
+  }
+});
+
+// Some panels have content that depends on their current pixel size
+function onPanelResize(el) {
+  if (el.id === 'pw-stage' && frames.length) render();
+  if (el.id === 'pw-playback') drawMarkerStripe();
+}
+
+// ----- Layout serialize / apply -----
+function captureLayout() {
+  const out = {};
+  document.querySelectorAll('.panel-window').forEach(el => {
+    out[el.id] = {
+      x: el.offsetLeft, y: el.offsetTop,
+      w: el.offsetWidth, h: el.offsetHeight,
+    };
+  });
+  return out;
+}
+
+function applyLayout(layout) {
+  if (!layout) return;
+  for (const [id, p] of Object.entries(layout)) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.style.left = p.x + 'px';
+    el.style.top = p.y + 'px';
+    el.style.width = p.w + 'px';
+    el.style.height = p.h + 'px';
+  }
+  // Re-render anything size-dependent
+  if (frames.length) render();
+  drawMarkerStripe();
+}
+
+// ----- Workspace storage (user-named saves) -----
+function loadAllWorkspaces() {
+  try {
+    const raw = localStorage.getItem(WS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function saveAllWorkspaces(map) {
+  localStorage.setItem(WS_STORAGE_KEY, JSON.stringify(map));
+}
+
+function getCurrentWorkspaceName() {
+  return localStorage.getItem(WS_CURRENT_KEY) || DEFAULT_WS_NAME;
+}
+
+function setCurrentWorkspaceName(name) {
+  localStorage.setItem(WS_CURRENT_KEY, name);
+}
+
+function getEffectiveLayout(name) {
+  // User saves override built-in defaults for the same name
+  const all = loadAllWorkspaces();
+  if (all[name]) return all[name];
+  if (BUILTIN_LAYOUTS[name]) return BUILTIN_LAYOUTS[name];
+  return BUILTIN_LAYOUTS[DEFAULT_WS_NAME];
+}
+
+function listAllWorkspaceNames() {
+  const all = loadAllWorkspaces();
+  const names = new Set([...Object.keys(BUILTIN_LAYOUTS), ...Object.keys(all)]);
+  return Array.from(names).sort();
+}
+
+function autoSaveCurrentLayout() {
+  // Persist any drag/resize change under the current workspace name.
+  const name = getCurrentWorkspaceName();
+  const all = loadAllWorkspaces();
+  all[name] = captureLayout();
+  saveAllWorkspaces(all);
+}
+
+function switchWorkspace(name) {
+  setCurrentWorkspaceName(name);
+  applyLayout(getEffectiveLayout(name));
+  updateWorkspaceDropdown();
+}
+
+function saveAsNewWorkspace(name) {
+  if (!name || !name.trim()) return;
+  name = name.trim();
+  const all = loadAllWorkspaces();
+  all[name] = captureLayout();
+  saveAllWorkspaces(all);
+  setCurrentWorkspaceName(name);
+  updateWorkspaceDropdown();
+}
+
+function resetCurrentWorkspace() {
+  const name = getCurrentWorkspaceName();
+  if (BUILTIN_LAYOUTS[name]) {
+    // Drop the user override so the built-in default takes effect
+    const all = loadAllWorkspaces();
+    delete all[name];
+    saveAllWorkspaces(all);
+    applyLayout(BUILTIN_LAYOUTS[name]);
+  } else {
+    // Custom workspace — reset means revert to Compact baseline
+    applyLayout(BUILTIN_LAYOUTS[DEFAULT_WS_NAME]);
+    const all = loadAllWorkspaces();
+    all[name] = captureLayout();
+    saveAllWorkspaces(all);
+  }
+}
+
+function deleteCurrentWorkspace() {
+  const name = getCurrentWorkspaceName();
+  if (BUILTIN_NAMES.has(name)) {
+    alert(`"${name}" is a built-in workspace and can't be deleted. Use Reset to clear your overrides.`);
+    return;
+  }
+  if (!confirm(`Delete workspace "${name}"?`)) return;
+  const all = loadAllWorkspaces();
+  delete all[name];
+  saveAllWorkspaces(all);
+  switchWorkspace(DEFAULT_WS_NAME);
+}
+
+function updateWorkspaceDropdown() {
+  const sel = $('workspaceSelect');
+  if (!sel) return;
+  const current = getCurrentWorkspaceName();
+  const names = listAllWorkspaceNames();
+  sel.innerHTML = names.map(n => {
+    const tag = BUILTIN_NAMES.has(n) ? ' (built-in)' : '';
+    return `<option value="${n}" ${n === current ? 'selected' : ''}>${n}${tag}</option>`;
+  }).join('');
+}
+
+function initWorkspace() {
+  // Make every panel-window draggable + resizable
+  document.querySelectorAll('.panel-window').forEach(makePanelInteractive);
+  // Apply the saved/current workspace
+  const name = getCurrentWorkspaceName();
+  applyLayout(getEffectiveLayout(name));
+  updateWorkspaceDropdown();
+  // Bring stage to front by default so the playhead-action ring isn't hidden
+  const stage = $('pw-stage');
+  if (stage) bringToFront(stage);
+}
+
+// Wire workspace topbar controls
+wire('workspaceSelect', 'onchange', e => switchWorkspace(e.target.value));
+wire('saveAsWsBtn',     'onclick',  () => {
+  const name = prompt('Save current layout as…\n(letters, numbers, spaces — built-in names get overridden under your local save)', '');
+  if (name) saveAsNewWorkspace(name);
+});
+wire('resetWsBtn',      'onclick',  () => {
+  if (confirm(`Reset "${getCurrentWorkspaceName()}" to its default layout?`)) resetCurrentWorkspace();
+});
+wire('deleteWsBtn',     'onclick',  deleteCurrentWorkspace);
+
+// Boot the panel system before manifest load so the page is positioned correctly
+initWorkspace();
+loadManifest();
+</script>
+</body>
+</html>
