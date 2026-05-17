@@ -26,9 +26,21 @@ From the repo root (`C:\Users\lucyl\Desktop\agi-3`):
 python -m http.server 8080
 ```
 
-Then open: <http://localhost:8080/agi3_v3/data_maker/>
-
 The server must be started from `agi-3/` so the relative paths (`../../agi3_v1/...`) resolve.
+
+## Three viewers
+
+All three read the same manifest/status_index and load the same recordings — they differ only in UI:
+
+| File | Public URL | Purpose |
+|------|------------|---------|
+| `index.html` | <https://agi3-viewer.netlify.app/> | **Annotation tool** — view_type / signature / commentary labelling, JSONL export. Use this when curating few-shot examples. |
+| `index_controls.html` | <https://agi3-viewer.netlify.app/index_controls.html> | **Controls viewer** — D-pad + click-cursor showing which input produced each frame; per-level breakdown with destiny labels (`level_completed` / `level_failed` etc.); recording-status topbar badge. |
+| `index_workspace.html` | <https://agi3-viewer.netlify.app/index_workspace.html> | **Workspace viewer** — same panels as Controls, but as a 3-lane docked layout with drag-to-resize splitters. Named workspace layouts persist to localStorage; built-ins: Compact, Wide, Equal. Autofit button equalizes everything. |
+
+Local: open at `http://localhost:8080/agi3_v3/data_maker/<filename>` (or use the `launch-data-maker.bat` desktop shortcut, which currently opens the Workspace viewer with a cache-bust query string).
+
+**Action-data caveat:** Agent recordings (clickgames v6–v8, sim_solver v9–v17) have `action_input.id = 0` on every frame because the framework's recorder doesn't capture the agent's chosen action. Human recordings work fully; agent replays show frame transitions but the Controls buttons can't light up until the notebook-side fix lands.
 
 ## Filters
 
