@@ -38,9 +38,9 @@ for %%P in (
 )
 
 if defined CHROME (
-    start "" %CHROME% --app="http://localhost:%PORT%/agi3_v3/data_maker/index_controls.html"
+    start "" %CHROME% --app="http://localhost:%PORT%/agi3_v3/data_maker/index_workspace.html?v=%RANDOM%"
 ) else (
-    start "" "http://localhost:%PORT%/agi3_v3/data_maker/index_controls.html"
+    start "" "http://localhost:%PORT%/agi3_v3/data_maker/index_workspace.html?v=%RANDOM%"
 )
 
 endlocal
