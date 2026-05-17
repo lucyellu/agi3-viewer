@@ -52,9 +52,10 @@ SOURCES: list[dict[str, Any]] = [
     },
 ]
 
-# Add sim_solver versions automatically
-for sv in ["v9", "v11", "v14", "v15", "v16", "v17"]:
-    p = DESKTOP_AGI3 / "agi3_v1" / "sim_solver" / "results" / sv / "recordings"
+# Add sim_solver versions automatically.
+sim_results_root = DESKTOP_AGI3 / "agi3_v1" / "sim_solver" / "results"
+for p in sorted(sim_results_root.glob("v*/recordings"), key=lambda x: x.parent.name):
+    sv = p.parent.name
     SOURCES.append({
         "id": f"agent-sim-{sv}",
         "label": f"Agent: sim_solver {sv}",
@@ -62,6 +63,22 @@ for sv in ["v9", "v11", "v14", "v15", "v16", "v17"]:
         "fs_path": p,
         "layout": "flat_prefixed",
     })
+
+# Add locally pulled Kaggle outputs from agi3_v3/results.
+results_root = REPO_ROOT.parent / "results"
+if results_root.exists():
+    for run_dir in sorted(results_root.glob("pulled_agi3-coach-gpu-*")):
+        rec_dir = run_dir / "recordings"
+        if not rec_dir.exists():
+            continue
+        run_id = run_dir.name.removeprefix("pulled_").replace("_latest", "").replace("_rtx", "-rtx")
+        SOURCES.append({
+            "id": f"agent-{run_id}",
+            "label": f"Agent: {run_id}",
+            "base_url": f"../results/{run_dir.name}/recordings",
+            "fs_path": rec_dir,
+            "layout": "flat_prefixed",
+        })
 
 
 def parse_recording_status(path: Path) -> dict[str, Any] | None:

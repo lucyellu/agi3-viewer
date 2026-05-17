@@ -2797,116 +2797,6 @@
       }
     }
   },
-  "agent-sim-v9": {
-    "bp35": {
-      "bp35.myagent.97d4b5b0-56aa-43d2-964b-7a695e57c617.recording.jsonl": {
-        "status": "partial",
-        "levels_completed": 1,
-        "win_levels": 9,
-        "total_actions": null,
-        "final_state": "NOT_FINISHED"
-      }
-    },
-    "cd82": {
-      "cd82.myagent.553b8caf-9fa7-404d-90d6-09575e3dd2c3.recording.jsonl": {
-        "status": "no_progress",
-        "levels_completed": 0,
-        "win_levels": 6,
-        "total_actions": null,
-        "final_state": "NOT_FINISHED"
-      }
-    },
-    "ft09": {
-      "ft09.myagent.0aed2bcc-cad0-4013-b421-a573e4c60a43.recording.jsonl": {
-        "status": "no_progress",
-        "levels_completed": 0,
-        "win_levels": 6,
-        "total_actions": null,
-        "final_state": "NOT_FINISHED"
-      }
-    },
-    "lf52": {
-      "lf52.myagent.1839bb8f-46f7-4438-b55f-46dde4d04e60.recording.jsonl": {
-        "status": "no_progress",
-        "levels_completed": 0,
-        "win_levels": 10,
-        "total_actions": null,
-        "final_state": "NOT_FINISHED"
-      }
-    },
-    "lp85": {
-      "lp85.myagent.036fd77b-0c92-4f47-919d-ababfdd7778f.recording.jsonl": {
-        "status": "partial",
-        "levels_completed": 1,
-        "win_levels": 8,
-        "total_actions": null,
-        "final_state": "NOT_FINISHED"
-      }
-    },
-    "r11l": {
-      "r11l.myagent.22efd716-60cb-48b1-909c-e29e7cd318fc.recording.jsonl": {
-        "status": "no_progress",
-        "levels_completed": 0,
-        "win_levels": 6,
-        "total_actions": null,
-        "final_state": "NOT_FINISHED"
-      }
-    },
-    "s5i5": {
-      "s5i5.myagent.b30bee24-116c-46b7-8382-a3ca6f9d44ed.recording.jsonl": {
-        "status": "no_progress",
-        "levels_completed": 0,
-        "win_levels": 8,
-        "total_actions": null,
-        "final_state": "NOT_FINISHED"
-      }
-    },
-    "sb26": {
-      "sb26.myagent.64ed8996-734d-42b6-bde9-3d497726e006.recording.jsonl": {
-        "status": "won",
-        "levels_completed": 8,
-        "win_levels": 8,
-        "total_actions": null,
-        "final_state": "WIN"
-      }
-    },
-    "sp80": {
-      "sp80.myagent.46954c1b-b985-4929-b411-eb70a2305eae.recording.jsonl": {
-        "status": "partial",
-        "levels_completed": 1,
-        "win_levels": 6,
-        "total_actions": null,
-        "final_state": "NOT_FINISHED"
-      }
-    },
-    "su15": {
-      "su15.myagent.65dd6b53-0940-4c0b-b6a5-e91635793d62.recording.jsonl": {
-        "status": "no_progress",
-        "levels_completed": 0,
-        "win_levels": 9,
-        "total_actions": null,
-        "final_state": "NOT_FINISHED"
-      }
-    },
-    "tn36": {
-      "tn36.myagent.63c67ef4-b0ff-4309-bea6-6fdd128330e8.recording.jsonl": {
-        "status": "no_progress",
-        "levels_completed": 0,
-        "win_levels": 7,
-        "total_actions": null,
-        "final_state": "NOT_FINISHED"
-      }
-    },
-    "vc33": {
-      "vc33.myagent.10309497-40c4-423b-9ca8-262c40204980.recording.jsonl": {
-        "status": "partial",
-        "levels_completed": 1,
-        "win_levels": 7,
-        "total_actions": null,
-        "final_state": "NOT_FINISHED"
-      }
-    }
-  },
   "agent-sim-v11": {
     "bp35": {
       "bp35.myagent.8b30c7e3-7403-4000-ab72-5e589370574f.recording.jsonl": {
@@ -3030,6 +2920,233 @@
         "status": "partial",
         "levels_completed": 1,
         "win_levels": 7,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    }
+  },
+  "agent-sim-v12": {
+    "ar25": {
+      "ar25.myagent.7923472f-bca5-4d62-a366-f0960f0dfa4b.recording.jsonl": {
+        "status": "no_progress",
+        "levels_completed": 0,
+        "win_levels": 8,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "bp35": {
+      "bp35.myagent.db97aad4-ab5d-48f1-941c-56ef59cd472a.recording.jsonl": {
+        "status": "partial",
+        "levels_completed": 1,
+        "win_levels": 9,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "cd82": {
+      "cd82.myagent.1718598d-1b8b-4ada-a339-636f1643fa20.recording.jsonl": {
+        "status": "partial",
+        "levels_completed": 2,
+        "win_levels": 6,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "cn04": {
+      "cn04.myagent.1e3a8e6e-797c-4a94-89e2-48b245e61e2c.recording.jsonl": {
+        "status": "partial",
+        "levels_completed": 1,
+        "win_levels": 6,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "dc22": {
+      "dc22.myagent.5ccb2cd8-c246-445d-8daa-d1673538e926.recording.jsonl": {
+        "status": "no_progress",
+        "levels_completed": 0,
+        "win_levels": 6,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "ft09": {
+      "ft09.myagent.5d127ca8-d925-4221-90fd-4cdb331a75dc.recording.jsonl": {
+        "status": "no_progress",
+        "levels_completed": 0,
+        "win_levels": 6,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "g50t": {
+      "g50t.myagent.ecf190cf-6175-4245-adb6-f60530b07458.recording.jsonl": {
+        "status": "no_progress",
+        "levels_completed": 0,
+        "win_levels": 7,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "ka59": {
+      "ka59.myagent.fce2f080-51e3-46b9-b407-f9b2df5c0ad2.recording.jsonl": {
+        "status": "no_progress",
+        "levels_completed": 0,
+        "win_levels": 7,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "lf52": {
+      "lf52.myagent.174ab1ff-09d0-4883-9b87-5fd6ad45d4be.recording.jsonl": {
+        "status": "partial",
+        "levels_completed": 1,
+        "win_levels": 10,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "lp85": {
+      "lp85.myagent.6eb8ec2e-345e-4e3e-98f6-56f958868a5b.recording.jsonl": {
+        "status": "partial",
+        "levels_completed": 1,
+        "win_levels": 8,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "ls20": {
+      "ls20.myagent.2cb5c7e1-a432-4ce8-81a9-e18c9fc845f7.recording.jsonl": {
+        "status": "no_progress",
+        "levels_completed": 0,
+        "win_levels": 7,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "m0r0": {
+      "m0r0.myagent.0b1379a4-0328-4448-b156-6209a30022b0.recording.jsonl": {
+        "status": "partial",
+        "levels_completed": 2,
+        "win_levels": 6,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "r11l": {
+      "r11l.myagent.7c6525ba-a6f7-404b-991f-b38a790c8e57.recording.jsonl": {
+        "status": "partial",
+        "levels_completed": 1,
+        "win_levels": 6,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "re86": {
+      "re86.myagent.f1b9d9eb-b0f0-4347-8690-2355e2a00446.recording.jsonl": {
+        "status": "no_progress",
+        "levels_completed": 0,
+        "win_levels": 8,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "s5i5": {
+      "s5i5.myagent.4fbe9f50-6bde-414b-ab5f-5b9f86cdaab2.recording.jsonl": {
+        "status": "partial",
+        "levels_completed": 2,
+        "win_levels": 8,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "sb26": {
+      "sb26.myagent.4befb4d5-2013-4676-8865-988c11f4b278.recording.jsonl": {
+        "status": "won",
+        "levels_completed": 8,
+        "win_levels": 8,
+        "total_actions": null,
+        "final_state": "WIN"
+      }
+    },
+    "sc25": {
+      "sc25.myagent.61a7ce5b-2ea0-4157-ab5e-f70eb4ef781b.recording.jsonl": {
+        "status": "no_progress",
+        "levels_completed": 0,
+        "win_levels": 6,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "sk48": {
+      "sk48.myagent.36d4b057-8267-4061-abd3-5e98bed1e629.recording.jsonl": {
+        "status": "no_progress",
+        "levels_completed": 0,
+        "win_levels": 8,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "sp80": {
+      "sp80.myagent.c23afcaa-737d-4214-80b5-d58708aa6fc3.recording.jsonl": {
+        "status": "no_progress",
+        "levels_completed": 0,
+        "win_levels": 6,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "su15": {
+      "su15.myagent.6375630f-346a-4ec5-a8b7-e03f7450a715.recording.jsonl": {
+        "status": "no_progress",
+        "levels_completed": 0,
+        "win_levels": 9,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "tn36": {
+      "tn36.myagent.7fcf04b8-e2ff-4103-bcc0-0e6a03a443f4.recording.jsonl": {
+        "status": "no_progress",
+        "levels_completed": 0,
+        "win_levels": 7,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "tr87": {
+      "tr87.myagent.b1d7e2c8-dc1d-4a3d-9c1d-d95db49bab55.recording.jsonl": {
+        "status": "partial",
+        "levels_completed": 2,
+        "win_levels": 6,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "tu93": {
+      "tu93.myagent.3bf2f0d9-e194-43f0-b310-d9fe2e15dd0d.recording.jsonl": {
+        "status": "partial",
+        "levels_completed": 8,
+        "win_levels": 9,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "vc33": {
+      "vc33.myagent.e3a589c3-45ba-47bb-b6f3-8433bd4a29b9.recording.jsonl": {
+        "status": "partial",
+        "levels_completed": 4,
+        "win_levels": 7,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "wa30": {
+      "wa30.myagent.1991d100-fbff-479c-a7c9-7d31db7afa28.recording.jsonl": {
+        "status": "no_progress",
+        "levels_completed": 0,
+        "win_levels": 9,
         "total_actions": null,
         "final_state": "NOT_FINISHED"
       }
@@ -3929,6 +4046,116 @@
         "status": "no_progress",
         "levels_completed": 0,
         "win_levels": 9,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    }
+  },
+  "agent-sim-v9": {
+    "bp35": {
+      "bp35.myagent.97d4b5b0-56aa-43d2-964b-7a695e57c617.recording.jsonl": {
+        "status": "partial",
+        "levels_completed": 1,
+        "win_levels": 9,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "cd82": {
+      "cd82.myagent.553b8caf-9fa7-404d-90d6-09575e3dd2c3.recording.jsonl": {
+        "status": "no_progress",
+        "levels_completed": 0,
+        "win_levels": 6,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "ft09": {
+      "ft09.myagent.0aed2bcc-cad0-4013-b421-a573e4c60a43.recording.jsonl": {
+        "status": "no_progress",
+        "levels_completed": 0,
+        "win_levels": 6,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "lf52": {
+      "lf52.myagent.1839bb8f-46f7-4438-b55f-46dde4d04e60.recording.jsonl": {
+        "status": "no_progress",
+        "levels_completed": 0,
+        "win_levels": 10,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "lp85": {
+      "lp85.myagent.036fd77b-0c92-4f47-919d-ababfdd7778f.recording.jsonl": {
+        "status": "partial",
+        "levels_completed": 1,
+        "win_levels": 8,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "r11l": {
+      "r11l.myagent.22efd716-60cb-48b1-909c-e29e7cd318fc.recording.jsonl": {
+        "status": "no_progress",
+        "levels_completed": 0,
+        "win_levels": 6,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "s5i5": {
+      "s5i5.myagent.b30bee24-116c-46b7-8382-a3ca6f9d44ed.recording.jsonl": {
+        "status": "no_progress",
+        "levels_completed": 0,
+        "win_levels": 8,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "sb26": {
+      "sb26.myagent.64ed8996-734d-42b6-bde9-3d497726e006.recording.jsonl": {
+        "status": "won",
+        "levels_completed": 8,
+        "win_levels": 8,
+        "total_actions": null,
+        "final_state": "WIN"
+      }
+    },
+    "sp80": {
+      "sp80.myagent.46954c1b-b985-4929-b411-eb70a2305eae.recording.jsonl": {
+        "status": "partial",
+        "levels_completed": 1,
+        "win_levels": 6,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "su15": {
+      "su15.myagent.65dd6b53-0940-4c0b-b6a5-e91635793d62.recording.jsonl": {
+        "status": "no_progress",
+        "levels_completed": 0,
+        "win_levels": 9,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "tn36": {
+      "tn36.myagent.63c67ef4-b0ff-4309-bea6-6fdd128330e8.recording.jsonl": {
+        "status": "no_progress",
+        "levels_completed": 0,
+        "win_levels": 7,
+        "total_actions": null,
+        "final_state": "NOT_FINISHED"
+      }
+    },
+    "vc33": {
+      "vc33.myagent.10309497-40c4-423b-9ca8-262c40204980.recording.jsonl": {
+        "status": "partial",
+        "levels_completed": 1,
+        "win_levels": 7,
         "total_actions": null,
         "final_state": "NOT_FINISHED"
       }

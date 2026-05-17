@@ -1,5 +1,5 @@
 {
-  "generated_at": 1778732057,
+  "generated_at": 1778981253,
   "branch": "dev",
   "sources": {
     "human": {
@@ -540,49 +540,6 @@
         ]
       }
     },
-    "agent-sim-v9": {
-      "label": "Agent: sim_solver v9",
-      "base_url": "../../agi3_v1/sim_solver/results/v9/recordings",
-      "layout": "flat_prefixed",
-      "games": {
-        "bp35": [
-          "bp35.myagent.97d4b5b0-56aa-43d2-964b-7a695e57c617.recording.jsonl"
-        ],
-        "cd82": [
-          "cd82.myagent.553b8caf-9fa7-404d-90d6-09575e3dd2c3.recording.jsonl"
-        ],
-        "ft09": [
-          "ft09.myagent.0aed2bcc-cad0-4013-b421-a573e4c60a43.recording.jsonl"
-        ],
-        "lf52": [
-          "lf52.myagent.1839bb8f-46f7-4438-b55f-46dde4d04e60.recording.jsonl"
-        ],
-        "lp85": [
-          "lp85.myagent.036fd77b-0c92-4f47-919d-ababfdd7778f.recording.jsonl"
-        ],
-        "r11l": [
-          "r11l.myagent.22efd716-60cb-48b1-909c-e29e7cd318fc.recording.jsonl"
-        ],
-        "s5i5": [
-          "s5i5.myagent.b30bee24-116c-46b7-8382-a3ca6f9d44ed.recording.jsonl"
-        ],
-        "sb26": [
-          "sb26.myagent.64ed8996-734d-42b6-bde9-3d497726e006.recording.jsonl"
-        ],
-        "sp80": [
-          "sp80.myagent.46954c1b-b985-4929-b411-eb70a2305eae.recording.jsonl"
-        ],
-        "su15": [
-          "su15.myagent.65dd6b53-0940-4c0b-b6a5-e91635793d62.recording.jsonl"
-        ],
-        "tn36": [
-          "tn36.myagent.63c67ef4-b0ff-4309-bea6-6fdd128330e8.recording.jsonl"
-        ],
-        "vc33": [
-          "vc33.myagent.10309497-40c4-423b-9ca8-262c40204980.recording.jsonl"
-        ]
-      }
-    },
     "agent-sim-v11": {
       "label": "Agent: sim_solver v11",
       "base_url": "../../agi3_v1/sim_solver/results/v11/recordings",
@@ -629,6 +586,88 @@
         ],
         "vc33": [
           "vc33.myagent.c86875bf-e16f-47d0-8044-3ddd37cf9498.recording.jsonl"
+        ]
+      }
+    },
+    "agent-sim-v12": {
+      "label": "Agent: sim_solver v12",
+      "base_url": "../../agi3_v1/sim_solver/results/v12/recordings",
+      "layout": "flat_prefixed",
+      "games": {
+        "ar25": [
+          "ar25.myagent.7923472f-bca5-4d62-a366-f0960f0dfa4b.recording.jsonl"
+        ],
+        "bp35": [
+          "bp35.myagent.db97aad4-ab5d-48f1-941c-56ef59cd472a.recording.jsonl"
+        ],
+        "cd82": [
+          "cd82.myagent.1718598d-1b8b-4ada-a339-636f1643fa20.recording.jsonl"
+        ],
+        "cn04": [
+          "cn04.myagent.1e3a8e6e-797c-4a94-89e2-48b245e61e2c.recording.jsonl"
+        ],
+        "dc22": [
+          "dc22.myagent.5ccb2cd8-c246-445d-8daa-d1673538e926.recording.jsonl"
+        ],
+        "ft09": [
+          "ft09.myagent.5d127ca8-d925-4221-90fd-4cdb331a75dc.recording.jsonl"
+        ],
+        "g50t": [
+          "g50t.myagent.ecf190cf-6175-4245-adb6-f60530b07458.recording.jsonl"
+        ],
+        "ka59": [
+          "ka59.myagent.fce2f080-51e3-46b9-b407-f9b2df5c0ad2.recording.jsonl"
+        ],
+        "lf52": [
+          "lf52.myagent.174ab1ff-09d0-4883-9b87-5fd6ad45d4be.recording.jsonl"
+        ],
+        "lp85": [
+          "lp85.myagent.6eb8ec2e-345e-4e3e-98f6-56f958868a5b.recording.jsonl"
+        ],
+        "ls20": [
+          "ls20.myagent.2cb5c7e1-a432-4ce8-81a9-e18c9fc845f7.recording.jsonl"
+        ],
+        "m0r0": [
+          "m0r0.myagent.0b1379a4-0328-4448-b156-6209a30022b0.recording.jsonl"
+        ],
+        "r11l": [
+          "r11l.myagent.7c6525ba-a6f7-404b-991f-b38a790c8e57.recording.jsonl"
+        ],
+        "re86": [
+          "re86.myagent.f1b9d9eb-b0f0-4347-8690-2355e2a00446.recording.jsonl"
+        ],
+        "s5i5": [
+          "s5i5.myagent.4fbe9f50-6bde-414b-ab5f-5b9f86cdaab2.recording.jsonl"
+        ],
+        "sb26": [
+          "sb26.myagent.4befb4d5-2013-4676-8865-988c11f4b278.recording.jsonl"
+        ],
+        "sc25": [
+          "sc25.myagent.61a7ce5b-2ea0-4157-ab5e-f70eb4ef781b.recording.jsonl"
+        ],
+        "sk48": [
+          "sk48.myagent.36d4b057-8267-4061-abd3-5e98bed1e629.recording.jsonl"
+        ],
+        "sp80": [
+          "sp80.myagent.c23afcaa-737d-4214-80b5-d58708aa6fc3.recording.jsonl"
+        ],
+        "su15": [
+          "su15.myagent.6375630f-346a-4ec5-a8b7-e03f7450a715.recording.jsonl"
+        ],
+        "tn36": [
+          "tn36.myagent.7fcf04b8-e2ff-4103-bcc0-0e6a03a443f4.recording.jsonl"
+        ],
+        "tr87": [
+          "tr87.myagent.b1d7e2c8-dc1d-4a3d-9c1d-d95db49bab55.recording.jsonl"
+        ],
+        "tu93": [
+          "tu93.myagent.3bf2f0d9-e194-43f0-b310-d9fe2e15dd0d.recording.jsonl"
+        ],
+        "vc33": [
+          "vc33.myagent.e3a589c3-45ba-47bb-b6f3-8433bd4a29b9.recording.jsonl"
+        ],
+        "wa30": [
+          "wa30.myagent.1991d100-fbff-479c-a7c9-7d31db7afa28.recording.jsonl"
         ]
       }
     },
@@ -954,6 +993,49 @@
         ],
         "wa30": [
           "wa30.myagent.4ffeb77c-88f9-4c51-9ea9-ac19f16b0561.recording.jsonl"
+        ]
+      }
+    },
+    "agent-sim-v9": {
+      "label": "Agent: sim_solver v9",
+      "base_url": "../../agi3_v1/sim_solver/results/v9/recordings",
+      "layout": "flat_prefixed",
+      "games": {
+        "bp35": [
+          "bp35.myagent.97d4b5b0-56aa-43d2-964b-7a695e57c617.recording.jsonl"
+        ],
+        "cd82": [
+          "cd82.myagent.553b8caf-9fa7-404d-90d6-09575e3dd2c3.recording.jsonl"
+        ],
+        "ft09": [
+          "ft09.myagent.0aed2bcc-cad0-4013-b421-a573e4c60a43.recording.jsonl"
+        ],
+        "lf52": [
+          "lf52.myagent.1839bb8f-46f7-4438-b55f-46dde4d04e60.recording.jsonl"
+        ],
+        "lp85": [
+          "lp85.myagent.036fd77b-0c92-4f47-919d-ababfdd7778f.recording.jsonl"
+        ],
+        "r11l": [
+          "r11l.myagent.22efd716-60cb-48b1-909c-e29e7cd318fc.recording.jsonl"
+        ],
+        "s5i5": [
+          "s5i5.myagent.b30bee24-116c-46b7-8382-a3ca6f9d44ed.recording.jsonl"
+        ],
+        "sb26": [
+          "sb26.myagent.64ed8996-734d-42b6-bde9-3d497726e006.recording.jsonl"
+        ],
+        "sp80": [
+          "sp80.myagent.46954c1b-b985-4929-b411-eb70a2305eae.recording.jsonl"
+        ],
+        "su15": [
+          "su15.myagent.65dd6b53-0940-4c0b-b6a5-e91635793d62.recording.jsonl"
+        ],
+        "tn36": [
+          "tn36.myagent.63c67ef4-b0ff-4309-bea6-6fdd128330e8.recording.jsonl"
+        ],
+        "vc33": [
+          "vc33.myagent.10309497-40c4-423b-9ca8-262c40204980.recording.jsonl"
         ]
       }
     }
